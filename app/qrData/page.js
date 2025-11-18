@@ -25,6 +25,7 @@ export default function QrData() {
   const [selectedLocation, setSelectedLocation] = useState(""); // Filter by location
   const [message, setMessage] = useState(""); // Success/error messages
   const [qrDataToShow, setQrDataToShow] = useState(null); // QR data to display in modal
+  const [qrTypes, setQrTypes] = useState([]); // type dropdown
   const [form, setForm] = useState({
     name: "",
     latitude: "",
@@ -54,6 +55,26 @@ export default function QrData() {
     });
     return () => unsubscribe();
   }, []);
+
+
+// Fetch QR types
+  useEffect(() => {
+    const qrTypeRef = ref(db, "QrCategory"); 
+    const unsubscribe = onValue(qrTypeRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const typeArray = Object.keys(data).map((key) => ({
+          id: key,
+          ...data[key],
+        }));
+        setQrTypes(typeArray);
+      } else {
+        setQrTypes([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
 
   // -------------------- Fetch Categories from Firebase --------------------
   useEffect(() => {
@@ -350,7 +371,7 @@ export default function QrData() {
           handleUpdate={handleUpdate}
           setSelectedQR={setSelectedQR}
           categories={categories}
-          qrType={qrType}
+          qrType={qrTypes}
           message={message}
         />
       )}

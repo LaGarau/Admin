@@ -69,7 +69,7 @@ export default function ViewCategoryPage() {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      <h1 className="text-center text-3xl font-bold mb-6">Manage Categories</h1>
+      <h1 className="text-center text-3xl font-bold mb-6">Manage Location Categories</h1>
 
       {message && (
         <p className="text-center text-green-600 font-semibold mb-4">{message}</p>
