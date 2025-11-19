@@ -270,20 +270,28 @@ const handleToggleAllStatus = async () => {
   if (!confirmChange) return;
 
   try {
-    for (const qr of filteredQRs) {
-      const newStatus = qr.status === "Active" ? "Deactive" : "Active";
-      const qrRef = ref(db, `QR-Data/${qr.id}`);
-      await update(qrRef, { status: newStatus });
-    }
+    // Decide new target status ONE TIME
+    const activeCount = filteredQRs.filter(qr => qr.status === "Active").length;
+    const targetStatus = activeCount > filteredQRs.length / 2 ? "Deactive" : "Active";
 
-    setMessage("All QR statuses updated successfully!");
+    const updates = {};
+    
+    filteredQRs.forEach((qr) => {
+      updates[`QR-Data/${qr.id}/status`] = targetStatus;
+    });
+
+    await update(ref(db), updates); // atomic update
+
+    setMessage(`All QR statuses updated to ${targetStatus}!`);
     setTimeout(() => setMessage(""), 3000);
 
   } catch (error) {
-    console.error(error);
+    console.error("Bulk update error:", error);
     setMessage("Error updating QR statuses.");
   }
 };
+
+
 
 
 
@@ -336,9 +344,9 @@ const handleToggleAllStatus = async () => {
         </button>
         <button
           onClick={handleToggleAllStatus}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-slate-700"
         >
-          Toggle All Status
+          Switch Status
         </button>
       </div>
 
