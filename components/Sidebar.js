@@ -16,7 +16,7 @@ const Sidebar = () => {
   const isActive = (href) => pathname === href;
 
   return (
-    <aside className="bg-gray-900 text-white w-64 min-h-screen p-5 sticky to-0% ">
+    <aside className="bg-gray-900 sticky left-0 text-white w-64 min-h-screen  p-5  to-0% ">
       <h1 className="flex items-center space-x-1 text-md sm:text-xl md:text-2xl">
         <img
           className="h-15 sm:h-20 md:h-[100px]"
@@ -83,17 +83,7 @@ const Sidebar = () => {
           </li>
         </Link>
 
-        {/* <Link href="/viewQrCategory" className="">
-          <li
-            className={`p-2 flex my-4 items-center gap-2 rounded-xl ${
-              isActive("/viewQrCategory")
-                ? "bg-green-600"
-                : "hover:bg-slate-600"
-            }`}
-          >
-            <FaChartBar className="text-2xl" /> View QR Category
-          </li>
-        </Link> */}
+       
 
         <Link href="/liveData" className="">
           <li
@@ -104,6 +94,18 @@ const Sidebar = () => {
             }`}
           >
            < MdTipsAndUpdates className="text-2xl" /> Live Data
+          </li>
+        </Link>
+
+         <Link href="/analytics" className="">
+          <li
+            className={`p-2 flex my-4 items-center gap-2 rounded-xl ${
+              isActive("/analytics")
+                ? "bg-green-600"
+                : "hover:bg-slate-600"
+            }`}
+          >
+            <FaChartBar className="text-2xl" /> Analytics Log
           </li>
         </Link>
 

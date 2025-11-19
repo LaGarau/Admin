@@ -279,10 +279,16 @@ const PlayerAnalytics = () => {
           };
         });
 
-        // Calculate rank based on total_points (highest points gets rank 1)
-        const sortedByPoints = usersArray.sort(
-          (a, b) => (b.total_points || 0) - (a.total_points || 0),
-        );
+        // 2-tier ranking system: (1) total_points descending, (2) time_span ascending if points equal
+        const sortedByPoints = usersArray.sort((a, b) => {
+          // Primary: Sort by total_points (higher points = better rank)
+          const pointsDiff = (b.total_points || 0) - (a.total_points || 0);
+          if (pointsDiff !== 0) return pointsDiff;
+
+          // Secondary: If points equal, sort by time_span (faster completion = better rank)
+          const timeSpanDiff = (a.time_span || 0) - (b.time_span || 0);
+          return timeSpanDiff;
+        });
         const playersWithRank = sortedByPoints.map((player, index) => ({
           ...player,
           rank: index + 1,
@@ -332,10 +338,16 @@ const PlayerAnalytics = () => {
           };
         });
 
-        // Calculate rank based on total_points (highest points gets rank 1)
-        const sortedByPoints = usersArray.sort(
-          (a, b) => (b.total_points || 0) - (a.total_points || 0),
-        );
+        // 2-tier ranking system: (1) total_points descending, (2) time_span ascending if points equal
+        const sortedByPoints = usersArray.sort((a, b) => {
+          // Primary: Sort by total_points (higher points = better rank)
+          const pointsDiff = (b.total_points || 0) - (a.total_points || 0);
+          if (pointsDiff !== 0) return pointsDiff;
+
+          // Secondary: If points equal, sort by time_span (faster completion = better rank)
+          const timeSpanDiff = (a.time_span || 0) - (b.time_span || 0);
+          return timeSpanDiff;
+        });
         const playersWithRank = sortedByPoints.map((player, index) => ({
           ...player,
           rank: index + 1,
@@ -478,36 +490,28 @@ const PlayerAnalytics = () => {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Player Analytics Dashboard
             </h1>
-            <p className="text-gray-600 text-base">
+            {/* <p className="text-gray-600 text-base">
               Track performance and rankings
-            </p>
-            {/* {lastUpdated && (
+            </p>*/}
+            {lastUpdated && (
               <div className="flex items-center gap-4 mt-2">
                 <p className="text-sm text-gray-500">
                   Last updated: {lastUpdated.toLocaleTimeString()}
                 </p>
               </div>
-            )} */}
+            )}
           </div>
           <div className="flex gap-3">
             <div className="flex items-center gap-2">
-              {/* <Button
+              <Button
                 onClick={handleManualRefresh}
                 className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-4 py-2"
               >
                 <RefreshIcon className="h-4 w-4" />
                 Refresh
-              </Button>*/}
+              </Button>
             </div>
-            {/* <Button
-              onClick={openAddModal}
-              className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-4 py-2"
-            >
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-              </svg>
-              Add User
-            </Button>*/}
+            
           </div>
         </div>
       </div>
@@ -520,7 +524,7 @@ const PlayerAnalytics = () => {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Total Players
+                  Active Players
                 </p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
                   {stats.totalPlayers}
@@ -561,8 +565,8 @@ const PlayerAnalytics = () => {
               </div>
             </div>
           </div>
-{/* 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+
+          {/* <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex flex-col items-center justify-center space-y-3">
               <p className="text-sm font-medium text-gray-600">
                 Countdown Timer
@@ -593,7 +597,7 @@ const PlayerAnalytics = () => {
                 </div>
               </div>
             </div>
-          </div> */}
+          </div>*/}
         </div>
 
         {/* Players Table */}

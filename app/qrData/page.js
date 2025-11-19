@@ -56,10 +56,9 @@ export default function QrData() {
     return () => unsubscribe();
   }, []);
 
-
-// Fetch QR types
+  // Fetch QR types
   useEffect(() => {
-    const qrTypeRef = ref(db, "QrCategory"); 
+    const qrTypeRef = ref(db, "QrCategory");
     const unsubscribe = onValue(qrTypeRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -74,7 +73,6 @@ export default function QrData() {
     });
     return () => unsubscribe();
   }, []);
-
 
   // -------------------- Fetch Categories from Firebase --------------------
   useEffect(() => {
@@ -181,9 +179,7 @@ export default function QrData() {
     // qr location
     // const location = (selectedLocation || qr.location)
     // const location = (selectedLocation || qr.name)
-    const location = (qr.name)
-      .toLowerCase()
-      .replace(/\s+/g, "_");
+    const location = qr.name.toLowerCase().replace(/\s+/g, "_");
     const points = qr.points || 0;
     // const finalURL = `${baseURL}${location.slice(0, 4)}-${name.slice(0,4)}${points}`;
     const finalURL = `${location},${points}`;
@@ -237,7 +233,9 @@ export default function QrData() {
         const name = (qr.name || qr.location)
           .toLowerCase()
           .replace(/\s+/g, "_");
-        const location = (qr.location || "_").toLowerCase().replace(/\s+/g, "_");
+        const location = (qr.location || "_")
+          .toLowerCase()
+          .replace(/\s+/g, "_");
         const points = qr.points || 0;
         const finalURL = `${qr.name},${points}`;
 
@@ -254,6 +252,58 @@ export default function QrData() {
       }
     }
   };
+
+
+
+
+  // -------------------- Toggle All QR Status (Active <-> Deactive) --------------------
+const handleToggleAllStatus = async () => {
+  if (!qrList.length) return;
+
+  const filteredQRs = selectedLocation
+    ? qrList.filter((qr) => qr.location === selectedLocation)
+    : qrList;
+
+  const confirmChange = window.confirm(
+    "Are you sure you want to toggle the status of all listed QR codes?"
+  );
+  if (!confirmChange) return;
+
+  try {
+    for (const qr of filteredQRs) {
+      const newStatus = qr.status === "Active" ? "Deactive" : "Active";
+      const qrRef = ref(db, `QR-Data/${qr.id}`);
+      await update(qrRef, { status: newStatus });
+    }
+
+    setMessage("All QR statuses updated successfully!");
+    setTimeout(() => setMessage(""), 3000);
+
+  } catch (error) {
+    console.error(error);
+    setMessage("Error updating QR statuses.");
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   // -------------------- Render UI --------------------
   return (
@@ -284,6 +334,12 @@ export default function QrData() {
         >
           Generate All Qr
         </button>
+        <button
+          onClick={handleToggleAllStatus}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          Toggle All Status
+        </button>
       </div>
 
       {/* -------------------- QR List -------------------- */}
@@ -292,8 +348,6 @@ export default function QrData() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {qrList.map((qr) => (
-            
-
             <div
               key={qr.id}
               className="relative bg-gray-800 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"

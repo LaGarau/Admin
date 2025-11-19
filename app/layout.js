@@ -14,8 +14,8 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         {/* <Navbar /> */}
-        <div className="flex">
-        <Sidebar/>
+        <div className="flex ">
+        <Sidebar />
         <div className="flex-1">
 
         {children}
