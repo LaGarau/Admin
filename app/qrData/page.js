@@ -290,7 +290,7 @@ const handleToggleAllStatus = async () => {
     }
 
     setMessage(`All QR statuses updated to ${targetStatus} one by one!`);
-    setTimeout(() => setMessage(""), 3000);
+    setTimeout(() => setMessage(""), 1000);
 
   } catch (error) {
     console.error("Sequential update error:", error);
