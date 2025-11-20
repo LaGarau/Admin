@@ -6,6 +6,7 @@ import { ref, onValue, remove, set, push } from "firebase/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { updateLeaderboardCollection } from "../../lib/utils/leaderboard.js";
 
 // Icon components as SVG
 const TrophyIcon = ({ className }) => (
@@ -241,7 +242,9 @@ const PlayerAnalytics = () => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   // Fetch players from Firebase and combine with scan and QR data
@@ -296,6 +299,9 @@ const PlayerAnalytics = () => {
 
         setPlayers(playersWithRank);
         setLastUpdated(new Date());
+
+        // Update Firebase leaderboard
+        updateLeaderboardCollection(playersWithRank);
       } else {
         setPlayers([]);
       }
@@ -511,7 +517,6 @@ const PlayerAnalytics = () => {
                 Refresh
               </Button>
             </div>
-            
           </div>
         </div>
       </div>
@@ -565,39 +570,6 @@ const PlayerAnalytics = () => {
               </div>
             </div>
           </div>
-
-          {/* <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex flex-col items-center justify-center space-y-3">
-              <p className="text-sm font-medium text-gray-600">
-                Countdown Timer
-              </p>
-              <div className="text-center">
-                <div className="text-2xl font-mono font-bold text-gray-900 mb-2">
-                  {formatTime(timeLeft)}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={isTimerRunning ? pauseTimer : startTimer}
-                    size="sm"
-                    className={`px-3 py-1 text-xs ${
-                      isTimerRunning
-                        ? "bg-red-600 hover:bg-red-700 text-white"
-                        : "bg-green-600 hover:bg-green-700 text-white"
-                    }`}
-                  >
-                    {isTimerRunning ? "Pause" : "Play"}
-                  </Button>
-                  <Button
-                    onClick={resetTimer}
-                    size="sm"
-                    className="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-700 text-white"
-                  >
-                    Reset
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>*/}
         </div>
 
         {/* Players Table */}
@@ -663,7 +635,9 @@ const PlayerAnalytics = () => {
                         >
                           <td className="p-3">
                             <span
-                              className={`text-lg font-semibold ${getRankColor(player.rank)}`}
+                              className={`text-lg font-semibold ${getRankColor(
+                                player.rank
+                              )}`}
                             >
                               {getRankBadge(player.rank)}
                             </span>

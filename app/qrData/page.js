@@ -254,9 +254,7 @@ export default function QrData() {
   };
 
 
-
-
-  // -------------------- Toggle All QR Status (Active <-> Deactive) --------------------
+// -------------------- Toggle All QR Status (Active <-> Deactive) --------------------
 const handleToggleAllStatus = async () => {
   if (!qrList.length) return;
 
@@ -265,28 +263,37 @@ const handleToggleAllStatus = async () => {
     : qrList;
 
   const confirmChange = window.confirm(
-    "Are you sure you want to toggle the status of all listed QR codes?"
+    "Are you sure you want to switch the status of all listed QR codes?"
   );
   if (!confirmChange) return;
 
   try {
-    // Decide new target status ONE TIME
     const activeCount = filteredQRs.filter(qr => qr.status === "Active").length;
-    const targetStatus = activeCount > filteredQRs.length / 2 ? "Deactive" : "Active";
+    const targetStatus =
+      activeCount > filteredQRs.length / 2 ? "Deactive" : "Active";
 
-    const updates = {};
-    
-    filteredQRs.forEach((qr) => {
-      updates[`QR-Data/${qr.id}/status`] = targetStatus;
-    });
+    //  sequencial  visible effect
+    for (const qr of filteredQRs) {
 
-    await update(ref(db), updates); // atomic update
+      
+      setQrList(prev =>
+        prev.map(item =>
+          item.id === qr.id ? { ...item, status: targetStatus } : item
+        )
+      );
 
-    setMessage(`All QR statuses updated to ${targetStatus}!`);
+      // Waits UI to shows the change
+      await new Promise((res) => setTimeout(res, 250));
+
+      // update Firebase
+      await update(ref(db, `QR-Data/${qr.id}`), { status: targetStatus });
+    }
+
+    setMessage(`All QR statuses updated to ${targetStatus} one by one!`);
     setTimeout(() => setMessage(""), 3000);
 
   } catch (error) {
-    console.error("Bulk update error:", error);
+    console.error("Sequential update error:", error);
     setMessage("Error updating QR statuses.");
   }
 };
