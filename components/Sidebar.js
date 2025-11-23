@@ -109,6 +109,19 @@ const Sidebar = () => {
           </li>
         </Link>
 
+
+         <Link href="/heatmaps" className="">
+          <li
+            className={`p-2 flex my-4 items-center gap-2 rounded-xl ${
+              isActive("/heatmaps")
+                ? "bg-green-600"
+                : "hover:bg-slate-600"
+            }`}
+          >
+            <FaChartBar className="text-2xl" /> HeatMaps
+          </li>
+        </Link>
+
         
 
        
