@@ -9,7 +9,7 @@ export default function AddQrPage() {
     latitude: "",
     longitude: "",
     location: "",
-    type: "", 
+    type: "",
     points: "",
     picture: "",
     description: "",
@@ -40,7 +40,7 @@ export default function AddQrPage() {
 
   // Fetch QR types
   useEffect(() => {
-    const qrTypeRef = ref(db, "QrCategory"); 
+    const qrTypeRef = ref(db, "QrCategory");
     const unsubscribe = onValue(qrTypeRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -56,31 +56,27 @@ export default function AddQrPage() {
     return () => unsubscribe();
   }, []);
 
-
-
-//----- handle change
+  //----- handle change
   // const handleChange = (e) => {
   //   setForm({ ...form, [e.target.name]: e.target.value });
   // };
 
   //----- handle change
-const handleChange = (e) => {
-  const { name, value } = e.target;
+  const handleChange = (e) => {
+    const { name, value } = e.target;
 
-  setForm({
-    ...form,
-    [name]: name === "points" ? parseInt(value || 0, 10) : value,
-  });
-};
-
-
+    setForm({
+      ...form,
+      [name]: name === "points" ? parseInt(value || 0, 10) : value,
+    });
+  };
 
   //------ handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.name || !form.location || !form.type) {
-      setMessage("⚠️ Please fill all required fields.");
+      setMessage(" Please fill all required fields.");
       return;
     }
 
@@ -107,16 +103,26 @@ const handleChange = (e) => {
   };
 
   return (
-    <div className="p-8 bg-gray-100 min-h-screen">
-      <h1 className="text-3xl font-bold mb-6 text-center">Add QR Code</h1>
+    <div className="p-8  min-h-screen">
+      <div className=" items-center flex gap-7">
+        <img src="mascot-with-qr.jpg" alt="img" />
+        <div>
+          <h1 className="text-3xl font-bold  ">
+            Generate <span className="text-[#FF0000]">QR</span> 
+          </h1>
+          <span className="opacity-80">Create QR codes for locations,sponsors, or hidden spots.</span>
+        </div>
+      </div>
 
       {message && (
-        <p className="mb-4 text-green-600 text-center font-semibold">{message}</p>
+        <p className="mb-4 text-green-600 text-center font-semibold">
+          {message}
+        </p>
       )}
 
       <form
         onSubmit={handleSubmit}
-        className="max-w-xl mx-auto bg-white p-6 rounded-xl shadow space-y-4"
+        className="max-w-xl mt-10  bg-[#F5F7FA] p-6 rounded-xl shadow space-y-4"
       >
         {/* QR Name */}
         <div>
@@ -126,7 +132,8 @@ const handleChange = (e) => {
             name="name"
             value={form.name}
             onChange={handleChange}
-            className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+            placeholder="Enter the Qr Code Name"
+            className="w-full p-2 mt-1 rounded-xl px-5 placeholder:text-[#718EBF] text-blue-500 border-slate-500  border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             required
           />
         </div>
@@ -139,8 +146,9 @@ const handleChange = (e) => {
               type="text"
               name="latitude"
               value={form.latitude}
+              placeholder="Enter the Latitude"
               onChange={handleChange}
-              className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+              className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
           <div className="w-1/2">
@@ -149,8 +157,9 @@ const handleChange = (e) => {
               type="text"
               name="longitude"
               value={form.longitude}
+              placeholder="Enter the Longitude"
               onChange={handleChange}
-              className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+              className="w-full p-2 mt-1 rounded-xl px-5 border-2 placeholder:text-[#718EBF] border-slate-500  text-blue-500  focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
         </div>
@@ -162,7 +171,7 @@ const handleChange = (e) => {
             name="location"
             value={form.location}
             onChange={handleChange}
-            className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+            className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             required
           >
             <option value="">-- Select Location --</option>
@@ -182,10 +191,11 @@ const handleChange = (e) => {
               name="type"
               value={form.type}
               onChange={handleChange}
-              className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+              
+              className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500  placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
               required
             >
-              <option value="">-- Select QR Type --</option>
+              <option value="" >-- Select QR Type --</option>
               {qrTypes.map((cat) => (
                 <option key={cat.id} value={cat.name}>
                   {cat.name}
@@ -195,13 +205,15 @@ const handleChange = (e) => {
           </div>
 
           <div className="w-1/2">
-            <label className="font-semibold">Points</label>
+            <label className="font-semibold">Points Allocated</label>
             <input
               type="number"
               name="points"
               value={form.points}
+              placeholder="Ente the Allocated Points"
               onChange={handleChange}
-              className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+              min={1}
+              className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF]  text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
         </div>
@@ -214,7 +226,8 @@ const handleChange = (e) => {
             name="picture"
             value={form.picture}
             onChange={handleChange}
-            className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+            placeholder="Enter the Url of the image"
+            className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500  placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
           />
         </div>
 
@@ -225,8 +238,9 @@ const handleChange = (e) => {
             name="description"
             value={form.description}
             onChange={handleChange}
+            placeholder="Enter the description"
             rows="3"
-            className="w-full p-2 mt-1 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+            className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
           />
         </div>
 
@@ -259,9 +273,9 @@ const handleChange = (e) => {
 
         <button
           type="submit"
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          className="bg-[#FF0000] text-white px-6 py-2 rounded-lg hover:bg-[#eb0909] cursor-pointer transition-colors"
         >
-          Add QR Code
+          Generate QR Code
         </button>
       </form>
     </div>

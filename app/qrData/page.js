@@ -15,6 +15,9 @@ import {
 import QRCode from "qrcode";
 import EditQrModal from "@/components/EditQrModel";
 import QrPopupModal from "@/components/QrPopupModel";
+import { BsCoin } from "react-icons/bs";
+import { SlLocationPin } from "react-icons/sl";
+import { BsQrCodeScan } from "react-icons/bs";
 
 export default function QrData() {
   // -------------------- State --------------------
@@ -253,207 +256,207 @@ export default function QrData() {
     }
   };
 
+  // -------------------- Toggle All QR Status (Active <-> Deactive) --------------------
+  const handleToggleAllStatus = async () => {
+    if (!qrList.length) return;
 
-// -------------------- Toggle All QR Status (Active <-> Deactive) --------------------
-const handleToggleAllStatus = async () => {
-  if (!qrList.length) return;
+    const filteredQRs = selectedLocation
+      ? qrList.filter((qr) => qr.location === selectedLocation)
+      : qrList;
 
-  const filteredQRs = selectedLocation
-    ? qrList.filter((qr) => qr.location === selectedLocation)
-    : qrList;
+    const confirmChange = window.confirm(
+      "Are you sure you want to switch the status of all listed QR codes?"
+    );
+    if (!confirmChange) return;
 
-  const confirmChange = window.confirm(
-    "Are you sure you want to switch the status of all listed QR codes?"
-  );
-  if (!confirmChange) return;
+    try {
+      const activeCount = filteredQRs.filter(
+        (qr) => qr.status === "Active"
+      ).length;
+      const targetStatus =
+        activeCount > filteredQRs.length / 2 ? "Deactive" : "Active";
 
-  try {
-    const activeCount = filteredQRs.filter(qr => qr.status === "Active").length;
-    const targetStatus =
-      activeCount > filteredQRs.length / 2 ? "Deactive" : "Active";
+      //  sequencial  visible effect
+      for (const qr of filteredQRs) {
+        setQrList((prev) =>
+          prev.map((item) =>
+            item.id === qr.id ? { ...item, status: targetStatus } : item
+          )
+        );
 
-    //  sequencial  visible effect
-    for (const qr of filteredQRs) {
+        // Waits UI to shows the change
+        await new Promise((res) => setTimeout(res, 250));
 
-      
-      setQrList(prev =>
-        prev.map(item =>
-          item.id === qr.id ? { ...item, status: targetStatus } : item
-        )
-      );
+        // update Firebase
+        await update(ref(db, `QR-Data/${qr.id}`), { status: targetStatus });
+      }
 
-      // Waits UI to shows the change
-      await new Promise((res) => setTimeout(res, 250));
-
-      // update Firebase
-      await update(ref(db, `QR-Data/${qr.id}`), { status: targetStatus });
+      setMessage(`All QR statuses updated to ${targetStatus} one by one!`);
+      setTimeout(() => setMessage(""), 1000);
+    } catch (error) {
+      console.error("Sequential update error:", error);
+      setMessage("Error updating QR statuses.");
     }
+  };
 
-    setMessage(`All QR statuses updated to ${targetStatus} one by one!`);
-    setTimeout(() => setMessage(""), 1000);
-
-  } catch (error) {
-    console.error("Sequential update error:", error);
-    setMessage("Error updating QR statuses.");
+  {
+    console.log(qrList);
   }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   // -------------------- Render UI --------------------
   return (
-    <div className="p-8 relative">
-      <h1 className="text-center text-3xl font-bold mb-6">QR-Code List</h1>
+    <>
+      <div className="p-8 relative ">
+        <div className="flex justify-between">
+          <h1 className=" text-2xl font-bold mb-6">
+            View all <span className="text-[#FF0000]">QR</span>
+          </h1>
+          <button
+            onClick={handleGenerateAll}
+            className="px-4  bg-[#FF0000] text-white rounded-lg hover:bg-[#d20505] "
+          >
+            Generate All Qr
+          </button>
+        </div>
 
-      {/* Message for success/error */}
-      {message && <p className="text-center text-green-600 mb-4">{message}</p>}
+        {/* Message for success/error */}
+        {message && (
+          <p className="text-center text-green-600 mb-4">{message}</p>
+        )}
 
-      {/* -------------------- Location Filter -------------------- */}
-      <div className="mb-6 flex justify-center items-center gap-4">
-        <select
-          value={selectedLocation}
-          onChange={(e) => setSelectedLocation(e.target.value)}
-          className="p-2 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
-        >
-          <option value="">-- All Locations --</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.name}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
+        {/* -------------------- Location Filter -------------------- */}
+        <div className="mb-6 flex justify-center items-center gap-4">
+          <select
+            value={selectedLocation}
+            onChange={(e) => setSelectedLocation(e.target.value)}
+            className="p-2 rounded bg-slate-100 focus:ring-2 focus:ring-blue-400 outline-none"
+          >
+            <option value="">-- All Locations --</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.name}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
 
-        <button
+          {/* <button
           onClick={handleGenerateAll}
           className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
+          >
           Generate All Qr
-        </button>
-        <button
-          onClick={handleToggleAllStatus}
-          className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-slate-700"
-        >
-          Switch Status
-        </button>
-      </div>
+          </button> */}
+          <button
+            onClick={handleToggleAllStatus}
+            className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-slate-700"
+          >
+            Switch Status
+          </button>
+        </div>
 
-      {/* -------------------- QR List -------------------- */}
-      {qrList.length === 0 ? (
-        <p className="text-center text-gray-600">No QR data found.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {qrList.map((qr) => (
-            <div
-              key={qr.id}
-              className="relative bg-gray-800 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
-              style={{
-                backgroundImage: `url(${qr.picture})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            >
-              {/*  dark overlay for readability */}
-              <div className="absolute inset-0 bg-black/70"></div>
+        {/* -------------------- QR List -------------------- */}
+        {qrList.length === 0 ? (
+          <p className="text-center text-gray-600">No QR data found.</p>
+        ) : (
+          <div className="grid grid-cols-1  sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {qrList.map((qr) => (
+              <div
+                key={qr.id}
+                className="relative bg-[#F5F7FA] my-5  w-[90%]  rounded-2xl shadow-2xl hover:shadow-gray-600 transition-all duration-300 overflow-hidden"
+              >
+                <div className="h-52 overflow-hidden">
+                  <img
+                    src={qr.picture}
+                    alt="img"
+                    className="h-52 w-full object-cover"
+                  />
+                </div>
+                <div className="flex items-center justify-center">
+                  <div className="mascot-wave-img bg-white h-13 flex justify-center relative bottom-7  w-13 rounded-full ">
+                    <img
+                      src="/ghumantey-wave.png"
+                      alt="img"
+                      className="object-cover h-auto w-auto"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <div className="flex gap-2 flex-col items-center text-center">
+                    <h1 className="font-semibold">{qr.name}</h1>
 
-              {/* Card Content placed above the overlay */}
-              <div className="relative z-10">
-                <h3 className="text-2xl font-bold mb-2">{qr.name}</h3>
-                <p className="text-gray-200 mb-1">
-                  <strong>Lat, Long:</strong> {qr.latitude}, {qr.longitude}
-                </p>
-                <p className="text-gray-200 mb-1">
-                  <strong>Type:</strong> {qr.type}
-                </p>
-                <p className="text-gray-200 mb-1">
-                  <strong>Points:</strong> {qr.points}
-                </p>
-                <p className="text-gray-200 mb-1">
-                  <strong>Location:</strong> {qr.location}
-                </p>
-                <p className="text-gray-200 mb-1">
-                  <strong>Description:</strong> {qr.description}
-                </p>
-                <p className="text-gray-200">
-                  <strong>Status:</strong>{" "}
-                  <span
-                    className={`${
-                      qr.status === "Active" ? "text-green-400" : "text-red-400"
-                    }`}
-                  >
-                    {qr.status}
-                  </span>
-                </p>
+                    {/* //---- Qr points------ */}
+                    <div className="qr-points flex items-center gap-3">
+                      <BsCoin className="mt-1 text-2xl" />
+                      <h5>{qr.points}</h5>
+                    </div>
+                  </div>
+                  {/* ///------Location details----- */}
+                </div>
+                <div className="px-5">
+                  <div className="flex gap-5 justify-center mt-5">
+                    <div className="lat-long flex flex-col items-center gap-3 ">
+                      <SlLocationPin className="text-2xl" />
+                      <h5 className="text-xs">
+                        {qr.latitude},{qr.longitude}
+                      </h5>
+                    </div>
 
-                {/* Buttons */}
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={() => handleEditClick(qr)}
-                    className="px-4 py-2 bg-blue-600 bg-opacity-80 text-white rounded-lg hover:bg-opacity-100 flex items-center gap-2"
-                  >
-                    <FaEdit /> Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(qr.id)}
-                    className="px-4 py-2 bg-red-600 bg-opacity-80 text-white rounded-lg hover:bg-opacity-100 flex items-center gap-2"
-                  >
-                    <FaTrashAlt /> Delete
-                  </button>
-                  <button
-                    onClick={() => handleGenerateQR(qr)}
-                    className="px-4 py-2 bg-green-600 bg-opacity-80 text-white rounded-lg hover:bg-opacity-100"
-                  >
-                    Generate QR
-                  </button>
+                    <div className="flex flex-col items-center gap-3">
+                      <BsQrCodeScan className="text-2xl" />
+                      <h5 className="text-xs">{qr.type}</h5>
+                    </div>
+                  </div>
+
+                  <hr />
+                  <div className="flex justify-around my-5 ">
+                    <button
+                      onClick={() => handleEditClick(qr)}
+                      className="bg-blue-800 px-5 text-sm text-white font-semibold py-1.5 rounded-md"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(qr.id)}
+                      className="bg-[#FF0000] px-5 text-sm text-white font-semibold py-1.5 rounded-md"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => handleGenerateQR(qr)}
+                      className="bg-green-700 px-5 text-sm text-white font-semibold py-1.5 rounded-md"
+                    >
+                      Generate
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      {/* -------------------- Edit Modal as Popup -------------------- */}
-      {selectedQR && !qrDataToShow && (
-        <EditQrModal
-          selectedQR={selectedQR}
-          form={form}
-          handleChange={handleChange}
-          handleUpdate={handleUpdate}
-          setSelectedQR={setSelectedQR}
-          categories={categories}
-          qrType={qrTypes}
-          message={message}
-        />
-      )}
+        {/* -------------------- Edit Modal as Popup -------------------- */}
+        {selectedQR && !qrDataToShow && (
+          <EditQrModal
+            selectedQR={selectedQR}
+            form={form}
+            handleChange={handleChange}
+            handleUpdate={handleUpdate}
+            setSelectedQR={setSelectedQR}
+            categories={categories}
+            qrType={qrTypes}
+            message={message}
+          />
+        )}
 
-      {/* -------------------- QR Popup Modal -------------------- */}
-      {qrDataToShow && (
-        <QrPopupModal
-          qrDataToShow={qrDataToShow}
-          setQrDataToShow={setQrDataToShow}
-          setSelectedQR={setSelectedQR}
-          downloadQR={downloadQR}
-        />
-      )}
-    </div>
+        {/* -------------------- QR Popup Modal -------------------- */}
+        {qrDataToShow && (
+          <QrPopupModal
+            qrDataToShow={qrDataToShow}
+            setQrDataToShow={setQrDataToShow}
+            setSelectedQR={setSelectedQR}
+            downloadQR={downloadQR}
+          />
+        )}
+      </div>
+    </>
   );
 }

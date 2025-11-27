@@ -3,83 +3,78 @@ import React, { useEffect, useState } from "react";
 import { Amita } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
-
+// import Ghumantey from '../public/nav-ghumante.png'
+import { IoIosSearch } from "react-icons/io";
+import { IoSettingsOutline } from "react-icons/io5";
+import { GoBell } from "react-icons/go";
 
 const amitaFont = Amita({
   subsets: ["latin"],
-  weight:["400"],
+  weight: ["400"],
   variable: "--font-amita",
 });
 
 const Navbar = () => {
-  const handleLogout = () => {
-    logout();
-    toast.success("Logout Successfully");
-    navigate("/");
-  };
-
-
-
- 
-
-  const user = "admin";
+  // const user = "admin";
   return (
     <>
-      <div
-        className={`navbar ${amitaFont.variable} sticky top-0 duration-500 ${
-          isScrolled ? "bg-[#FBFBFD] shadow-lg" : "bg-[#FBFBFD]"
-        } flex justify-between
-        
-         px-5 sm:px-10 md:px-12 lg:px-15
-         py-5  
-         z-100  
-         font-semibold`}
-      >
-        <div>
-          <Link href="/dashboard">
-            <h1 className="flex items-center space-x-3 text-lg sm:text-xl md:text-2xl">
-              <img
-                className="h-16 sm:h-20 md:h-[100px]"
-                src="/ghumante.png"
-                alt="Ghumante logo"
-              />
-              <div className="flex flex-col leading-tight">
-                <span className="custom-title">Ghumante</span>
-                <span className="text-[#784E9A] font-heading">युवा</span>
-              </div>
-            </h1>
-          </Link>
-        </div>
+      <nav className="sticky top-0 z-50 bg-gradient-to-r from-blue-50 via-blue-300 to-blue-200">
+        <div
+          className="navbar  duration-500 b  flex justify-between
+        px-5 sm:px-10 md:px-12 lg:px-10
+        font-semibold"
+        >
+          <div className=" w-[23%] flex items-center justify-between">
+            <Link href="/dashboard">
+              <h1
+                className="flex items-center space-x-3 text-lg sm:text-xl 
+              md:text-2xl"
+              >
+                <img
+                  className="h-16 sm:h-20 md:h-[100px]"
+                  src="/NavLogo.png"
+                  alt="Ghumante logo"
+                />
+              </h1>
+            </Link>
+          </div>
 
-        <div className="details flex gap-6 items-center">
-          {!user ? (
-          <>
-            <button
-                
-                className="text-[#784E9A] hover:text-purple-500 font-semibold
-                text-sm sm:text-lg md:text-lg
-                "
-              >
-                Login
-              </button>
-          </>
-          ) : (
-            <>
-              <h5 className="text-xs sm:text-md md:text-lg ">
-                Welcome, <span className="custom-title">{user}</span>
-              </h5>
-              <button
-                onClick={handleLogout}
-                className="text-[#784E9A] hover:text-purple-500 font-semibold
-                text-sm sm:text-lg md:text-lg
-                "
-              >
-                Logout
-              </button>
-            </>
-          )}
+          <div className="w-full  flex items-center justify-between  ">
+            <div className="w-[30%]">
+              <h1>Hello Ghumantey 👋</h1>
+              <p>Good Morning</p>
+            </div>
+            <div className="flex w-[50%]  h-auto justify-between items-center">
+              <div className="flex items-center">
+                <input
+                  type="search"
+                  name="search"
+                  id="search"
+                  className="bg-[#F5F7FA] float-end px-10 py-2.5 rounded-3xl"
+                  placeholder="Search for something"
+                />
+                <IoIosSearch className="text-3xl absolute ml-2" />
+              </div>
+              <div className="bg-[#F5F7FA] rounded-4xl p-2  items-center">
+                <IoSettingsOutline className="text-2xl" />
+              </div>
+              <div className="bg-[#F5F7FA] rounded-4xl  p-2 items-center">
+                <GoBell className="text-2xl" />
+              </div>
+              <div className="bg-[#F5F7FA] rounded-4xl p-2  items-center">
+                <img
+                  src="nav-ghumante.png"
+                  alt="img"
+                  className="w-8 h-8 rounded-2xl"
+                />
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </nav>
+
+
+      
     </>
   );
 };
