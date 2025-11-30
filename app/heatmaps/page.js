@@ -834,88 +834,108 @@ const HeatmapsPage = () => {
   };
   // --- END OF QR MARKER LOGIC ---
 
+  // Replace your existing addPlayerMarkersToMap with this optimized version
   const addPlayerMarkersToMap = async () => {
     if (!galliMapInstance.current || playerLocationList.length === 0) return;
 
-    // Clear existing markers before drawing new ones (Best Practice)
-    clearPlayerMarkers();
-
+    // 1. Create a copy of the current markers to modify
+    const currentMarkers = { ...playerMarkerReferences };
+    const activePlayerIds = new Set();
     const PLAYER_ICON_URL = "/player.png";
 
-    try {
-      const newPlayerMarkerReferences = {};
-      for (const player of playerLocationList) {
+    for (const player of playerLocationList) {
+      activePlayerIds.add(player.id);
+      const lat = player.latitude;
+      const lng = player.longitude;
+
+      // CHECK: Does a marker already exist for this player?
+      if (currentMarkers[player.id]) {
+        // --- UPDATE EXISTING MARKER ---
+        const existingMarker = currentMarkers[player.id];
+        
+        // 1. Update Position (Standard Mapbox/MapLibre API usually supported by Galli)
+        if (typeof existingMarker.setLngLat === "function") {
+          existingMarker.setLngLat([lng, lat]);
+        }
+
+        // 2. Update Click Handler (So the popup shows fresh data/time)
+        // We need to update the closure to use the NEW 'player' data
         try {
-          const lat = player.latitude;
-          const lng = player.longitude;
+           const el = existingMarker.getElement ? existingMarker.getElement() : null;
+           if (el) {
+               el.onclick = (e) => {
+                  e.stopPropagation(); 
+                  handlePlayerMarkerClick(player); // Uses fresh 'player' data
+               };
+           }
+        } catch (e) { console.warn("Could not update click listener", e); }
+
+      } else {
+        // --- CREATE NEW MARKER (Only runs once per session) ---
+        try {
           const lastUpdateDate = player.lastUpdate
             ? new Date(player.lastUpdate).toLocaleString()
             : "N/A";
 
-          if (galliMapInstance.current.displayPinMarker) {
-            const marker = await galliMapInstance.current.displayPinMarker({
-              latLng: [lat, lng],
-              title: player.name || "Player Location",
-              description: `Current Location | Last Update: ${lastUpdateDate}`,
-              color: COLOR_PLAYER,
-              tooltip: `Live: ${player.name}`,
-              hoverText: `Live Location: ${player.name}`,
-            });
+          const marker = await galliMapInstance.current.displayPinMarker({
+            latLng: [lat, lng],
+            title: player.name || "Player Location",
+            description: `Current Location`,
+            color: COLOR_PLAYER,
+            tooltip: `Live: ${player.name}`,
+            hoverText: `Live Location: ${player.name}`,
+          });
 
-            if (marker) {
-              newPlayerMarkerReferences[player.id] = marker;
+          if (marker) {
+            currentMarkers[player.id] = marker;
 
-              // --- APPLIED STYLING TECHNIQUE (Same as QR Markers) ---
-              setTimeout(() => {
-                try {
-                  const el = marker.getElement ? marker.getElement() : null;
+            // Apply Styling (Only needed on creation)
+            setTimeout(() => {
+              try {
+                const el = marker.getElement ? marker.getElement() : null;
+                if (el && el.nodeName === "DIV") {
+                  el.style.backgroundImage = `url(${PLAYER_ICON_URL})`;
+                  el.style.backgroundSize = "cover";
+                  el.style.backgroundRepeat = "no-repeat";
+                  el.style.width = "55px";
+                  el.style.height = "60px";
+                  el.style.backgroundColor = "transparent";
+                  el.innerHTML = ""; 
+                  el.style.transform = "translate(-50%, -50%)";
 
-                  if (el && el.nodeName === "DIV") {
-                    // Apply custom image background
-                    el.style.backgroundImage = `url(${PLAYER_ICON_URL})`;
-                    el.style.backgroundSize = "cover";
-                    el.style.backgroundRepeat = "no-repeat";
-
-                    // Set size (Matching QR size)
-                    el.style.width = "55px";
-                    el.style.height = "60px";
-
-                    el.style.backgroundColor = "transparen"; // Hide default pin color
-                    // el.style.borderRadius = "50%"; // Make it circular
-
-                    // Apply standard white border (Same as QR)
-                    // el.style.border = "0px";
-
-                    // Optional: Add shadow for better visibility
-                    // el.style.boxShadow = "0 2px 5px rgba(0,0,0,0.3)";
-
-                    el.innerHTML = ""; // Remove the default SVG pin content
-                    el.style.transform = "translate(-50%, -50%)"; // Center alignment
-
-                    // NEW: Add click handler to the Player marker element
-                    el.onclick = (e) => {
-                      e.stopPropagation(); // Prevent map click events from firing
-                      handlePlayerMarkerClick(player);
-                    };
-                  }
-                } catch (domError) {
-                  console.warn(
-                    `DOM manipulation failed for Player marker ${player.id}`,
-                    domError,
-                  );
+                  el.onclick = (e) => {
+                    e.stopPropagation();
+                    handlePlayerMarkerClick(player);
+                  };
                 }
-              }, 100);
-              // ------------------------------------------------------
-            }
+              } catch (domError) {
+                console.warn(`DOM manipulation failed for Player ${player.id}`, domError);
+              }
+            }, 100);
           }
         } catch (markerError) {
           console.log(markerError);
         }
       }
-      setPlayerMarkerReferences(newPlayerMarkerReferences);
-    } catch (error) {
-      console.error("Error adding Player markers:", error);
     }
+
+    // --- CLEANUP: Remove markers for players who went offline ---
+    // (We do this here instead of clearing ALL markers at the start)
+    Object.keys(currentMarkers).forEach((id) => {
+      if (!activePlayerIds.has(id)) {
+        try {
+          if (galliMapInstance.current.removePinMarker) {
+             galliMapInstance.current.removePinMarker(currentMarkers[id]);
+          }
+          delete currentMarkers[id];
+        } catch (e) {
+          console.warn(`Failed to remove old marker:`, e.message);
+        }
+      }
+    });
+
+    // Update state with the new/modified list of markers
+    setPlayerMarkerReferences(currentMarkers);
   };
 
   const clearPlayerMarkers = () => {
