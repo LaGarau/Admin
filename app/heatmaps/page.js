@@ -569,9 +569,9 @@ const HeatmapsPage = () => {
         }
 
         const accessToken = process.env.NEXT_PUBLIC_GALLIMAPS_ACCESS_TOKEN;
-        if (!accessToken) {
-          console.error("Missing GalliMaps Access Token");
-        }
+        // if (!accessToken) {
+        //   console.error("Missing GalliMaps Access Token");
+        // }
 
         const galliMapsObject = {
           accessToken: accessToken,
