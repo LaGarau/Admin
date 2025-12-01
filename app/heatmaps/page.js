@@ -344,7 +344,7 @@ const HeatmapsPage = () => {
 
   const [playerLocationList, setPlayerLocationList] = useState([]);
   const [playerDataLoading, setPlayerDataLoading] = useState(true);
-  const [playerDataError, setPlayerDataError] = useState(null);
+  const [playerDataError, setPlayerDataError] = useState(null); 
 
   // === STATE FOR TOGGLE FUNCTIONALITY ===
   const [playerMarkersVisible, setPlayerMarkersVisible] = useState(true);
@@ -552,7 +552,7 @@ const HeatmapsPage = () => {
         }
         const script = document.createElement("script");
         script.src =
-          "https://gallimap.com/static/dist/js/gallimaps.vector.min.latest.js";
+          NEXT_PUBLIC_GALLI_MAP_KEY;
         script.async = true;
         script.onload = () => resolve();
         script.onerror = () =>

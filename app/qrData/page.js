@@ -299,21 +299,22 @@ export default function QrData() {
     }
   };
 
-  {
-    console.log(qrList);
-  }
+  // {
+  //   console.log(qrList);
+  // }
 
   // -------------------- Render UI --------------------
   return (
     <>
       <div className="p-8 relative ">
-        <div className="flex justify-between">
-          <h1 className=" text-2xl font-bold mb-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">
             View all <span className="text-[#FF0000]">QR</span>
           </h1>
+
           <button
             onClick={handleGenerateAll}
-            className="px-4  bg-[#FF0000] text-white rounded-lg hover:bg-[#d20505] "
+            className="px-4 bg-[#FF0000] text-white rounded-lg hover:bg-[#d20505] p-3"
           >
             Generate All Qr
           </button>
@@ -370,6 +371,15 @@ export default function QrData() {
                     className="h-52 w-full object-cover"
                   />
                 </div>
+                <h1
+                  className={`absolute top-2 ml-2 text-white ${
+                    qr.status === "Active"
+                      ? "bg-green-600 ease-in-out"
+                      : "bg-red-600 ease-in-out"
+                  }  px-3  rounded-2xl text-xs py-1`}
+                >
+                  {qr.status}
+                </h1>
                 <div className="flex items-center justify-center">
                   <div className="mascot-wave-img bg-white h-13 flex justify-center relative bottom-7  w-13 rounded-full ">
                     <img
@@ -406,7 +416,7 @@ export default function QrData() {
                     </div>
                   </div>
 
-                  <hr />
+                  <hr className="my-5 opacity-80" />
                   <div className="flex justify-around my-5 ">
                     <button
                       onClick={() => handleEditClick(qr)}
