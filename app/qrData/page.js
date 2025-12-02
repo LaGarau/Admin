@@ -306,7 +306,7 @@ export default function QrData() {
   // -------------------- Render UI --------------------
   return (
     <>
-      <div className="p-8 relative ">
+      <div className="p-2 md:p-8 mb-20 relative ">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">
             View all <span className="text-[#FF0000]">QR</span>
@@ -314,7 +314,7 @@ export default function QrData() {
 
           <button
             onClick={handleGenerateAll}
-            className="px-4 bg-[#FF0000] text-white rounded-lg hover:bg-[#d20505] p-3"
+            className="px-2 md:px-4 bg-[#FF0000] text-sm md:text-md text-white rounded-lg hover:bg-[#d20505] p-2"
           >
             Generate All Qr
           </button>
@@ -348,7 +348,7 @@ export default function QrData() {
           </button> */}
           <button
             onClick={handleToggleAllStatus}
-            className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-slate-700"
+            className="px-4 py-2 text-sm md:text-md bg-gray-800 text-white rounded-lg hover:bg-slate-700"
           >
             Switch Status
           </button>
@@ -362,7 +362,7 @@ export default function QrData() {
             {qrList.map((qr) => (
               <div
                 key={qr.id}
-                className="relative bg-[#F5F7FA] my-5  w-[90%]  rounded-2xl shadow-2xl hover:shadow-gray-600 transition-all duration-300 overflow-hidden"
+                className="relative bg-[#F5F7FA] my-5  w-[100%]  rounded-2xl shadow-2xl hover:shadow-gray-600 transition-all duration-300 overflow-hidden"
               >
                 <div className="h-52 overflow-hidden">
                   <img

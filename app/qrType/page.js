@@ -117,7 +117,7 @@ export default function AddQrCategoryPage() {
   return (
     <>
       {/* Add QR Type */}
-      <div className="p-8 bg-gray-50 h-fit">
+      <div className="p-8  bg-gray-50 h-fit">
         <h1 className="text-center text-3xl font-bold mb-6">Add QR Type</h1>
 
         <form
@@ -166,7 +166,7 @@ export default function AddQrCategoryPage() {
       </div>
 
       {/* Display Categories */}
-      <div className="p-8 bg-gray-50 min-h-screen">
+      <div className="p-8 bg-gray-50 pb-20 min-h-screen">
         <h1 className="text-center text-3xl font-bold mb-6">Manage Categories</h1>
 
         {message && (

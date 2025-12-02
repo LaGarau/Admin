@@ -103,7 +103,7 @@ export default function AddQrPage() {
   };
 
   return (
-    <div className="p-8  min-h-screen">
+    <div className="p-3 md:p-8 mb-10 min-h-screen">
       <div className=" items-center flex gap-7">
         <img src="mascot-with-qr.jpg" alt="img" />
         <div>
@@ -133,14 +133,15 @@ export default function AddQrPage() {
             value={form.name}
             onChange={handleChange}
             placeholder="Enter the Qr Code Name"
-            className="w-full p-2 mt-1 rounded-xl px-5 placeholder:text-[#718EBF] text-blue-500 border-slate-500  border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+            className="w-full p-2 mt-1 rounded-xl 
+           px-2 md:px-5 placeholder:text-[#718EBF] text-blue-500 border-slate-500  border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             required
           />
         </div>
 
         {/* Latitude & Longitude */}
-        <div className="flex gap-4">
-          <div className="w-1/2">
+        <div className=" flex flex-col md:flex gap-4">
+          <div className="w-full md:w-1/2">
             <label className="font-semibold">Latitude</label>
             <input
               type="text"
@@ -148,10 +149,10 @@ export default function AddQrPage() {
               value={form.latitude}
               placeholder="Enter the Latitude"
               onChange={handleChange}
-              className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+              className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
-          <div className="w-1/2">
+          <div className="w-full md:w-1/2">
             <label className="font-semibold">Longitude</label>
             <input
               type="text"
@@ -159,7 +160,7 @@ export default function AddQrPage() {
               value={form.longitude}
               placeholder="Enter the Longitude"
               onChange={handleChange}
-              className="w-full p-2 mt-1 rounded-xl px-5 border-2 placeholder:text-[#718EBF] border-slate-500  text-blue-500  focus:ring-2 focus:ring-blue-400 outline-none"
+              className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-2 placeholder:text-[#718EBF] border-slate-500  text-blue-500  focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
         </div>
@@ -171,7 +172,7 @@ export default function AddQrPage() {
             name="location"
             value={form.location}
             onChange={handleChange}
-            className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+            className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             required
           >
             <option value="">-- Select Location --</option>
@@ -192,7 +193,7 @@ export default function AddQrPage() {
               value={form.type}
               onChange={handleChange}
               
-              className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500  placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+              className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500  placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
               required
             >
               <option value="" >-- Select QR Type --</option>
@@ -213,7 +214,7 @@ export default function AddQrPage() {
               placeholder="Ente the Allocated Points"
               onChange={handleChange}
               min={1}
-              className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF]  text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+              className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF]  text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
         </div>
@@ -227,7 +228,7 @@ export default function AddQrPage() {
             value={form.picture}
             onChange={handleChange}
             placeholder="Enter the Url of the image"
-            className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500  placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+            className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500  placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
           />
         </div>
 
@@ -240,7 +241,7 @@ export default function AddQrPage() {
             onChange={handleChange}
             placeholder="Enter the description"
             rows="3"
-            className="w-full p-2 mt-1 rounded-xl px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+            className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
           />
         </div>
 

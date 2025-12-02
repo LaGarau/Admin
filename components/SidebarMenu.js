@@ -12,6 +12,6 @@ export const sidebarMenu = [
   { name: "QR Data", href: "/qrData", icon: <SiGooglecloudstorage className="text-xl" /> },
   { name: "Location Category", href: "/addCategoryPage", icon: <BiSolidCategory className="text-xl" /> },
   { name: "QR Category", href: "/qrType", icon: <MdCategory className="text-xl" /> },
-  { name: "Live Data", href: "/liveData", icon: <FaChartBar className="text-xl" /> },
+  // { name: "Live Data", href: "/liveData", icon: <FaChartBar className="text-xl" /> },
   { name: "HeatMaps", href: "/heatmaps", icon: <TbDeviceDesktopAnalytics className="text-xl" /> },
 ];

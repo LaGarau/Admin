@@ -123,10 +123,10 @@ export default function AddCategoryPage() {
       {/* Add Form */}
       <form
         onSubmit={handleSubmit}
-        className="max-w-md mx-auto bg-white shadow-lg rounded-xl p-6 space-y-4 mb-10"
+        className="max-w-md mx-auto bg-white shadow-lg rounded-xl  p-6 space-y-4 mb-10"
       >
         <div>
-          <label className="font-semibold block mb-1">Location Name</label>
+          <label className="font-semibold block mb-1 ">Location Name</label>
           <input
             type="text"
             name="name"
@@ -167,7 +167,7 @@ export default function AddCategoryPage() {
       {categories.length === 0 ? (
         <p className="text-center text-gray-500">No locations found.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid mb-10 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.map((cat) => (
             <div
               key={cat.id}

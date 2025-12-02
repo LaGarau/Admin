@@ -13,12 +13,11 @@ export default function RootLayout({ children }) {
       <body>
         <Navbar />
         {/* <div className="flex"> */}
-        <div className="flex ">
+        <div className="flex min-h-screen">
           <Sidebar />
-          <div className="flex-1">
+          <main className="flex-1 md:ml-0 ml-0 p-4 md:p-8 ">
             {children}
-            {/* <Footer/> */}
-          </div>
+          </main>
         </div>
         {/* </div> */}
       </body>
