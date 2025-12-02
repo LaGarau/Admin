@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
-@theme inline{
-    --font-heading: var(--font-amita)
+@theme inline {
+    --font-heading: var(--font-amita);
+    
+}
+.maplibregl-ctrl-top-right, .maplibregl-ctrl-bottom-right,  .maplibregl-ctrl-bottom-left {
+  display: none;
 }

@@ -29,6 +29,10 @@ const COLOR_PROXIMITY_RED = "#EF4444";
 const DEFAULT_BORDER_STYLE = "3px solid #ffffff"; // Default border color (Black)
 const HIGHLIGHT_BORDER_WIDTH = "10px"; // Thicker border for highlight
 
+// --- ACTIVITY CONFIGURATION (NEW) ---
+const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 Minutes in milliseconds
+// ------------------------------------
+
 // --- GEOLOCATION UTILITY FUNCTION ---
 const EARTH_RADIUS_M = 6371000;
 function getDistance(lat1, lon1, lat2, lon2) {
@@ -667,9 +671,8 @@ const HeatmapsPage = () => {
     return () => unsubscribe();
   }, []);
 
-  // --- FIREBASE LISTENERS: Player Location (NO CHANGE) ---
+  // --- FIREBASE LISTENERS: Player Location (UPDATED FOR INACTIVITY CHECK) ---
   useEffect(() => {
-    // *** CHANGE 1: Fetch from "playernav" table instead of "Users" ***
     const playerNavRef = ref(db, "playernav");
     const unsubscribe = onValue(
       playerNavRef,
@@ -677,6 +680,8 @@ const HeatmapsPage = () => {
         try {
           const data = snapshot.val();
           if (data) {
+            const now = Date.now(); // Get current timestamp for comparison
+
             const playerArray = Object.keys(data)
               .map((key) => ({ id: key, ...data[key] }))
               .filter((player) => {
@@ -684,24 +689,37 @@ const HeatmapsPage = () => {
                   player.latitude && !isNaN(parseFloat(player.latitude));
                 const hasValidLng =
                   player.longitude && !isNaN(parseFloat(player.longitude));
-                return hasValidLat && hasValidLng;
+                
+                // 1. Convert the datetime string to a Unix timestamp (milliseconds)
+                // Use the datetime field for activity check
+                const timestamp = new Date(player.datetime).getTime();
+                const isValidTimestamp = !isNaN(timestamp);
+
+                // Initial coordinate checks
+                if (!hasValidLat || !hasValidLng) return false;
+
+                // 2. Inactivity Check: Only display if the timestamp is recent
+                const isWithinThreshold = isValidTimestamp && (now - timestamp <= INACTIVITY_THRESHOLD_MS);
+
+                // Player must have valid coordinates AND a recent timestamp
+                return isWithinThreshold;
               })
               .map((player) => ({
                 id: player.id,
-                // *** CHANGE 2: Use 'username' for name (or fall back to ID) ***
-                // The old code used username || firstName || id. We simplify to username || id
                 name: player.username || player.id,
                 latitude: parseFloat(player.latitude),
                 longitude: parseFloat(player.longitude),
-                // *** CHANGE 3: Keep lastUpdate for UI, using a generic 'lastUpdate' key or current time as placeholder ***
-                lastUpdate: player.lastUpdate || Date.now(),
+                // CRITICAL: Store the parsed timestamp for the PlayerListPopup and the periodic cleanup
+                lastUpdate: new Date(player.datetime).getTime(),
               }));
+              
             setPlayerLocationList(playerArray);
             setPlayerDataError(null);
           } else {
             setPlayerLocationList([]);
           }
         } catch (error) {
+          console.error("Error processing Player Location data:", error);
           setPlayerDataError("Error processing Player Location data");
         } finally {
           setPlayerDataLoading(false);
@@ -713,6 +731,34 @@ const HeatmapsPage = () => {
       },
     );
     return () => unsubscribe();
+  }, []);
+
+  // --- NEW EFFECT: PERIODIC CLEANUP FOR INACTIVE PLAYERS ---
+  useEffect(() => {
+    // Run this check every 30 seconds
+    const intervalId = setInterval(() => {
+      setPlayerLocationList((currentPlayers) => {
+        if (currentPlayers.length === 0) return currentPlayers;
+
+        const now = Date.now();
+        // Filter out players whose last update is older than the threshold
+        const activePlayers = currentPlayers.filter((player) => {
+          // 'lastUpdate' is the parsed timestamp from the Firebase listener
+          const lastUpdate = player.lastUpdate || 0; 
+          const timeSinceUpdate = now - lastUpdate;
+          
+          return timeSinceUpdate <= INACTIVITY_THRESHOLD_MS;
+        });
+
+        // Optimization: Only update state if we actually removed someone
+        if (activePlayers.length !== currentPlayers.length) {
+          return activePlayers;
+        }
+        return currentPlayers;
+      });
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
   }, []);
 
   // --- HELPER TO SET MARKER BORDER STYLE (NO CHANGE) ---
