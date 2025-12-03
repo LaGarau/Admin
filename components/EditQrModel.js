@@ -14,7 +14,7 @@ export default function EditQrModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-gray-100 dark:bg-gray-900/90 backdrop-blur-md border border-gray-100 dark:border-gray-700 shadow-2xl rounded-2xl p-8 w-[100%] max-w-5xl relative animate-fadeIn">
+      <div className="bg-white dark:bg-gray-900/90 backdrop-blur-md border border-gray-100 dark:border-gray-700 shadow-2xl rounded-2xl p-8 w-[100%] max-w-6xl relative animate-fadeIn">
         <button
           onClick={() => setSelectedQR(null)}
           className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-gray-300 transition"
@@ -36,10 +36,10 @@ export default function EditQrModal({
           </p>
         )}
 
-        <form onSubmit={handleUpdate} className="space-y-4 flex gap-5">
-          <div>
+        <form onSubmit={handleUpdate} className="space-y-4 flex  gap-10">
+          <div className="w-[50%]">
             {/* QR Name */}
-            <div>
+            <div >
               <label className="font-semibold">QR Name</label>
               <input
                 type="text"
@@ -145,7 +145,7 @@ export default function EditQrModal({
           </div>
 
           {/* --------------- Break------------ */}
-          <div>
+          <div className="w-[50%]">
             {/* Description */}
             <div>
               <label className="font-semibold">Description</label>
