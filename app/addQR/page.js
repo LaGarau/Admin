@@ -10,6 +10,8 @@ export default function AddQrPage() {
     longitude: "",
     location: "",
     type: "",
+    prize: "",
+    externalLink: "",
     points: "",
     picture: "",
     description: "",
@@ -90,6 +92,8 @@ export default function AddQrPage() {
         longitude: "",
         location: "",
         type: "",
+        prize: "",
+        externalLink: "",
         points: "",
         picture: "",
         description: "",
@@ -108,9 +112,11 @@ export default function AddQrPage() {
         <img src="mascot-with-qr.jpg" alt="img" />
         <div>
           <h1 className="text-3xl font-bold  ">
-            Generate <span className="text-[#FF0000]">QR</span> 
+            Generate <span className="text-[#FF0000]">QR</span>
           </h1>
-          <span className="opacity-80">Create QR codes for locations,sponsors, or hidden spots.</span>
+          <span className="opacity-80">
+            Create QR codes for locations,sponsors, or hidden spots.
+          </span>
         </div>
       </div>
 
@@ -140,13 +146,15 @@ export default function AddQrPage() {
         </div>
 
         {/* Latitude & Longitude */}
-        <div className=" flex flex-col md:flex gap-4">
+        <div className=" flex flex-col md:flex-row gap-4">
           <div className="w-full md:w-1/2">
             <label className="font-semibold">Latitude</label>
             <input
               type="text"
               name="latitude"
               value={form.latitude}
+              
+              
               placeholder="Enter the Latitude"
               onChange={handleChange}
               className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
@@ -192,11 +200,10 @@ export default function AddQrPage() {
               name="type"
               value={form.type}
               onChange={handleChange}
-              
               className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500  placeholder:text-[#718EBF]  text-[#718EBF] border-2 focus:ring-2 focus:ring-blue-400 outline-none"
               required
             >
-              <option value="" >-- Select QR Type --</option>
+              <option value="">-- Select QR Type --</option>
               {qrTypes.map((cat) => (
                 <option key={cat.id} value={cat.name}>
                   {cat.name}
@@ -242,6 +249,33 @@ export default function AddQrPage() {
             placeholder="Enter the description"
             rows="3"
             className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+          />
+        </div>
+
+        {/* ----- Prize count ---------- */}
+        <div className="w-full">
+          <label className="font-semibold">Prize Count</label>
+          <input
+            type="number"
+            name="prize"
+            value={form.prize}
+            placeholder="Ente the Allocated Points"
+            onChange={handleChange}
+            min={1}
+            className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF]  text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+          />
+        </div>
+
+        {/* ------------ External link------------- */}
+        <div>
+          <label className="font-semibold">External Link</label>
+          <input
+            type="url"
+            name="externalLink"
+            value={form.externalLink}
+            onChange={handleChange}
+            placeholder="Enter the Url of the image"
+            className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500  placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
           />
         </div>
 
