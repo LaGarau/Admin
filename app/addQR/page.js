@@ -73,7 +73,6 @@ export default function AddQrPage() {
     });
   };
 
-  //------ handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -84,7 +83,26 @@ export default function AddQrPage() {
 
     try {
       const timestamp = Date.now();
-      await push(ref(db, "QR-Data"), { ...form, timestamp });
+
+      // 1Add QR code
+      const qrRef = await push(ref(db, "QR-Data"), { ...form, timestamp });
+
+      // 2 Generate prize codes if prize count > 0
+      if (form.prize && form.prize > 0) {
+        const prizeCodesRef = ref(db, "PrizeCodes");
+        for (let i = 0; i < form.prize; i++) {
+          const code = `${form.name.replace(/\s+/g, "-")}-${Date.now()}-${
+            i + 1
+          }`;
+          await push(prizeCodesRef, {
+            qrId: qrRef.key,
+            qrName: form.name,
+            code,
+            used: false, // mark if the prize has been claimed
+          });
+        }
+      }
+
       setMessage("QR Code added successfully!");
       setForm({
         name: "",
@@ -153,8 +171,6 @@ export default function AddQrPage() {
               type="text"
               name="latitude"
               value={form.latitude}
-              
-              
               placeholder="Enter the Latitude"
               onChange={handleChange}
               className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500 placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
