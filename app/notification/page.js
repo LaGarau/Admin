@@ -7,7 +7,7 @@ import { IoMdNotificationsOutline } from "react-icons/io";
 
 const Notification = () => {
   const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(""); // store user ID
   const [imgUrl, setImgUrl] = useState("");
   const [message, setMessage] = useState("");
   const [notifications, setNotifications] = useState([]);
@@ -31,7 +31,7 @@ const Notification = () => {
     });
   }, []);
 
-  // Fetch Users
+  // Fetch users
   useEffect(() => {
     const usersRef = ref(realtimeDb, "Users");
 
@@ -47,7 +47,7 @@ const Notification = () => {
     });
   }, []);
 
-  // Filter only users that have a valid username
+  // Filter only users with valid username
   const filteredUsers = users.filter(
     (u) => u.username && u.username.trim() !== ""
   );
@@ -55,31 +55,38 @@ const Notification = () => {
   // Add / Update Notification
   const handleSubmit = (e) => {
     e.preventDefault();
-
     if (!message && !imgUrl) return;
+    if (!selectedUserId) {
+      alert("Please select a user to send the notification!");
+      return;
+    }
+
+    const selectedUserObj = users.find((u) => u.id === selectedUserId);
 
     if (editId) {
       const updateRef = ref(realtimeDb, `notifications/${editId}`);
       update(updateRef, {
-        imgUrl: imgUrl,
-        message: message,
-        username: selectedUser,
+        imgUrl,
+        message,
+        userId: selectedUserId,
+        username: selectedUserObj.username,
         createdAt: Date.now(),
       });
       setEditId(null);
     } else {
       const notificationsRef = ref(realtimeDb, "notifications");
       push(notificationsRef, {
-        imgUrl: imgUrl,
-        message: message,
-        username: selectedUser,
+        imgUrl,
+        message,
+        userId: selectedUserId,
+        username: selectedUserObj.username,
         createdAt: Date.now(),
       });
     }
 
     setImgUrl("");
     setMessage("");
-    setSelectedUser("");
+    setSelectedUserId("");
   };
 
   const handleDelete = (id) => {
@@ -90,13 +97,12 @@ const Notification = () => {
   const handleEdit = (item) => {
     setImgUrl(item.imgUrl);
     setMessage(item.message);
-    setSelectedUser(item.username || "");
+    setSelectedUserId(item.userId || "");
     setEditId(item.id);
   };
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      {/* Input Form */}
       <form
         className="bg-white shadow-md w-full rounded-lg p-6 space-y-4"
         onSubmit={handleSubmit}
@@ -124,13 +130,13 @@ const Notification = () => {
 
         {/* Username Dropdown */}
         <select
-          value={selectedUser}
-          onChange={(e) => setSelectedUser(e.target.value)}
+          value={selectedUserId}
+          onChange={(e) => setSelectedUserId(e.target.value)}
           className="w-full p-3 border rounded-lg"
         >
           <option value="">Select User</option>
           {filteredUsers.map((u) => (
-            <option key={u.id} value={u.username}>
+            <option key={u.id} value={u.id}>
               {u.username}
             </option>
           ))}
@@ -141,7 +147,6 @@ const Notification = () => {
         </button>
       </form>
 
-      {/* Display Notifications */}
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         {notifications.map((item) => (
           <div
@@ -165,7 +170,7 @@ const Notification = () => {
 
               {item.username && (
                 <p className="text-sm text-gray-600">
-                  Posted by:{" "}
+                  Sent to:{" "}
                   <span className="font-semibold">{item.username}</span>
                 </p>
               )}
