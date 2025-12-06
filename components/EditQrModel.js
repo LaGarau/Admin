@@ -184,6 +184,17 @@ export default function EditQrModal({
                 className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500  placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
               />
             </div>
+            <div>
+              <label className="font-semibold">SocialMedia Link</label>
+              <input
+                type="url"
+                name="socialMediaLink"
+                value={form.socialMediaLink}
+                onChange={handleChange}
+                placeholder="Enter the Url of the image"
+                className="w-full p-2 mt-1 rounded-xl px-2 md:px-5 border-slate-500  placeholder:text-[#718EBF] text-blue-500 border-2 focus:ring-2 focus:ring-blue-400 outline-none"
+              />
+            </div>
 
             {/* Status */}
             <div className="flex gap-2 items-center">
