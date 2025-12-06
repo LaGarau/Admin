@@ -22,7 +22,6 @@ export const db = getDatabase(app); // export the database instance
 
 
 
-
 // // lib/firebase.js
 // import { initializeApp } from "firebase/app";
 // import { getDatabase } from "firebase/database"; 

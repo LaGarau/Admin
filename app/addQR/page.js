@@ -73,56 +73,110 @@ export default function AddQrPage() {
     });
   };
 
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+
+  //   if (!form.name || !form.location || !form.type) {
+  //     setMessage(" Please fill all required fields.");
+  //     return;
+  //   }
+
+  //   try {
+  //     const timestamp = Date.now();
+
+  //     // 1Add QR code
+  //     const qrRef = await push(ref(db, "QR-Data"), { ...form, timestamp });
+
+  //     // 2 Generate prize codes if prize count > 0
+  //     if (form.prize && form.prize > 0) {
+  //       const prizeCodesRef = ref(db, "PrizeCodes");
+  //       for (let i = 0; i < form.prize; i++) {
+  //         const code = `${form.name.replace(/\s+/g, "-")}-${Date.now()}-${
+  //           i + 1
+  //         }`;
+  //         await push(prizeCodesRef, {
+  //           qrId: qrRef.key,
+  //           qrName: form.name,
+  //           code,
+  //           used: false, // mark if the prize has been claimed
+  //         });
+  //       }
+  //     }
+
+  //     setMessage("QR Code added successfully!");
+  //     setForm({
+  //       name: "",
+  //       latitude: "",
+  //       longitude: "",
+  //       location: "",
+  //       type: "",
+  //       prize: "",
+  //       externalLink: "",
+  //       points: "",
+  //       picture: "",
+  //       description: "",
+  //       status: "Active",
+  //     });
+  //     setTimeout(() => setMessage(""), 3000);
+  //   } catch (err) {
+  //     console.error(err);
+  //     setMessage("Error adding QR code.");
+  //   }
+  // };
+
+
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (!form.name || !form.location || !form.type) {
-      setMessage(" Please fill all required fields.");
-      return;
-    }
+  if (!form.name || !form.location || !form.type) {
+    setMessage("Please fill all required fields.");
+    return;
+  }
 
-    try {
-      const timestamp = Date.now();
+  try {
+    const timestamp = Date.now();
 
-      // 1Add QR code
-      const qrRef = await push(ref(db, "QR-Data"), { ...form, timestamp });
+    // 1. Add QR code
+    const qrRef = await push(ref(db, "QR-Data"), { ...form, timestamp });
 
-      // 2 Generate prize codes if prize count > 0
-      if (form.prize && form.prize > 0) {
-        const prizeCodesRef = ref(db, "PrizeCodes");
-        for (let i = 0; i < form.prize; i++) {
-          const code = `${form.name.replace(/\s+/g, "-")}-${Date.now()}-${
-            i + 1
-          }`;
-          await push(prizeCodesRef, {
-            qrId: qrRef.key,
-            qrName: form.name,
-            code,
-            used: false, // mark if the prize has been claimed
-          });
-        }
+    // 2. Generate prize codes if prize count > 0
+    if (form.prize && form.prize > 0) {
+      const prizeCodesRef = ref(db, "PrizeCodes");
+      for (let i = 0; i < form.prize; i++) {
+        // Generate a random 4-digit number
+        const random4Digit = Math.floor(1000 + Math.random() * 9000);
+        const code = `${form.name.replace(/\s+/g, "-")}-${random4Digit}`;
+
+        await push(prizeCodesRef, {
+          qrId: qrRef.key,
+          qrName: form.name,
+          code,
+          used: false, // mark if the prize has been claimed
+        });
       }
-
-      setMessage("QR Code added successfully!");
-      setForm({
-        name: "",
-        latitude: "",
-        longitude: "",
-        location: "",
-        type: "",
-        prize: "",
-        externalLink: "",
-        points: "",
-        picture: "",
-        description: "",
-        status: "Active",
-      });
-      setTimeout(() => setMessage(""), 3000);
-    } catch (err) {
-      console.error(err);
-      setMessage("Error adding QR code.");
     }
-  };
+
+    setMessage("QR Code added successfully!");
+    setForm({
+      name: "",
+      latitude: "",
+      longitude: "",
+      location: "",
+      type: "",
+      prize: "",
+      externalLink: "",
+      points: "",
+      picture: "",
+      description: "",
+      status: "Active",
+    });
+    setTimeout(() => setMessage(""), 3000);
+  } catch (err) {
+    console.error(err);
+    setMessage("Error adding QR code.");
+  }
+};
 
   return (
     <div className="p-3 md:p-8 mb-10 min-h-screen">
