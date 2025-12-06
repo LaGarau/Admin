@@ -44,4 +44,9 @@ export const sidebarMenu = [
     href: "/notification",
     icon: <IoMdNotificationsOutline className="text-xl" />,
   },
+  {
+    name: "Prizeassignment",
+    href: "/prizeAssignments",
+    icon: <IoMdNotificationsOutline className="text-xl" />,
+  },
 ];
