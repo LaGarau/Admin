@@ -89,14 +89,15 @@ const Notification = () => {
       const selectedPrize = available[randomIndex];
 
       // Mark prize as used
-      await update(ref(realtimeDb, PrizeCodes/${selectedPrize.id}), {
+      await update(ref(realtimeDb, `PrizeCodes/${selectedPrize.id}`), {
         used: true,
         assignedTo: userId,
         assignedAt: Date.now(),
       });
 
+
       // Mark user as winner
-      await update(ref(realtimeDb, UsersWinningStatus/${userId}), {
+      await update(ref(realtimeDb, `UsersWinningStatus/${userId}`), {
         won: true,
         prizeCode: selectedPrize.code,
         wonAt: Date.now(),
