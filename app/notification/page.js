@@ -64,7 +64,7 @@ const Notification = () => {
   }, []);
 
   // ----------------------------------------------------
-  // 2) AUTO TRIGGER PRIZE WHEN USER REACHES 8 SCANS
+  // 2) AUTO TRIGGER PRIZE WHEN USER REACHES EXACTLY 8 SCANS
   // ----------------------------------------------------
   useEffect(() => {
     const scanRef = ref(realtimeDb, "scannedQRCodes");
@@ -76,14 +76,21 @@ const Notification = () => {
       const userId = scan.userId;
       addDebugLog(`🔔 New scan detected: ${scan.qrName} by user ${userId}`, "info");
 
-      // Prevent double-trigger
+      // CRITICAL: Check if user already won FIRST
+      const winSnap = await get(ref(realtimeDb, `UsersWinningStatus/${userId}`));
+      if (winSnap.val()?.won) {
+        addDebugLog(`🚫 User ${userId} already won a prize. No action taken.`, "warning");
+        return;
+      }
+
+      // Prevent double-trigger for the same user
       if (processingRef.current.has(userId)) {
         addDebugLog(`⏸️ User ${userId} already being processed, skipping...`, "warning");
         return;
       }
       processingRef.current.add(userId);
 
-      // Get all scans again
+      // Get all scans for this user
       const scansSnap = await get(scanRef);
       const allScans = scansSnap.val() || {};
       const userScans = Object.values(allScans).filter(s => s.userId === userId);
@@ -91,9 +98,12 @@ const Notification = () => {
       const uniqueCount = new Set(userScans.map(s => s.qrName)).size;
       addDebugLog(`📊 User ${userId} has ${uniqueCount} unique scans`, "info");
 
+      // ONLY trigger if they have EXACTLY 8 scans and haven't won yet
       if (uniqueCount === 8) {
-        addDebugLog(`🎯 User ${userId} reached 8 scans! Auto-assigning prize...`, "success");
+        addDebugLog(`🎯 User ${userId} reached exactly 8 scans! Auto-assigning prize...`, "success");
         await handleClaimPrize(userId);
+      } else if (uniqueCount > 8) {
+        addDebugLog(`⚠️ User ${userId} has ${uniqueCount} scans (more than 8). Prize already assigned.`, "warning");
       } else {
         addDebugLog(`⏳ User ${userId} needs ${8 - uniqueCount} more unique scans`, "info");
       }
@@ -103,7 +113,7 @@ const Notification = () => {
   }, [prizeCodes, users]);
 
   // ----------------------------------------------------
-  // 3) CLAIM PRIZE FUNCTION (AUTO + MANUAL)
+  // 3) CLAIM PRIZE FUNCTION (AUTO + MANUAL) - ONE PRIZE PER PLAYER ONLY
   // ----------------------------------------------------
   const handleClaimPrize = async (userId) => {
     const user = users.find(u => u.id === userId);
@@ -115,13 +125,26 @@ const Notification = () => {
     addDebugLog(`🎁 Starting prize assignment for ${user.username}...`, "info");
 
     try {
-      // Has the user already won?
+      // CRITICAL CHECK: Has the user already won?
       addDebugLog(`🔍 Checking if ${user.username} already won...`, "info");
       const winSnap = await get(ref(realtimeDb, `UsersWinningStatus/${userId}`));
       if (winSnap.val()?.won) {
-        addDebugLog(`⚠️ ${user.username} already won a prize!`, "warning");
+        addDebugLog(`🚫 ${user.username} ALREADY WON! Prize code: ${winSnap.val()?.prizeCode}. Aborting.`, "error");
         return;
       }
+
+      // Verify they have exactly 8 unique scans
+      const scansSnap = await get(ref(realtimeDb, "scannedQRCodes"));
+      const allScans = scansSnap.val() || {};
+      const userScans = Object.values(allScans).filter(s => s.userId === userId);
+      const uniqueCount = new Set(userScans.map(s => s.qrName)).size;
+
+      if (uniqueCount !== 8) {
+        addDebugLog(`🚫 ${user.username} has ${uniqueCount} scans, not 8. Cannot assign prize.`, "error");
+        return;
+      }
+
+      addDebugLog(`✅ ${user.username} verified: 8 unique scans and no prior win`, "success");
 
       const available = prizeCodes.filter(p => !p.used);
       addDebugLog(`📦 Found ${available.length} available prizes`, "info");
@@ -131,7 +154,7 @@ const Notification = () => {
         return;
       }
 
-      // RANDOM PRIZE
+      // RANDOM PRIZE SELECTION
       const randomIndex = Math.floor(Math.random() * available.length);
       const selectedPrize = available[randomIndex];
       addDebugLog(`🎲 Randomly selected prize #${randomIndex + 1}: ${selectedPrize.code}`, "success");
@@ -144,9 +167,8 @@ const Notification = () => {
         assignedAt: Date.now(),
       });
 
-
-      // Mark user as winner
-      addDebugLog(`🏆 Marking ${user.username} as winner...`, "info");
+      // Mark user as winner - THIS IS THE ONLY TIME THIS HAPPENS
+      addDebugLog(`🏆 Marking ${user.username} as winner (ONE TIME ONLY)...`, "info");
       await update(ref(realtimeDb, `UsersWinningStatus/${userId}`), {
         won: true,
         prizeCode: selectedPrize.code,
@@ -155,14 +177,14 @@ const Notification = () => {
 
       // Log notification
       await push(ref(realtimeDb, "notifications"), {
-        message: `🎉 ${user.username} completed all scans and won: ${selectedPrize.code}`,
+        message: `🎉 ${user.username} completed all 8 scans and won: ${selectedPrize.code}`,
         username: user.username,
         prizeCode: selectedPrize.code,
         status: "success",
         createdAt: Date.now(),
       });
 
-      addDebugLog(`✅ Successfully assigned ${selectedPrize.code} to ${user.username}!`, "success");
+      addDebugLog(`✅ Successfully assigned ${selectedPrize.code} to ${user.username}! USER CAN ONLY WIN ONCE.`, "success");
 
     } catch (err) {
       addDebugLog(`❌ Prize assignment error: ${err.message}`, "error");
@@ -248,71 +270,75 @@ const Notification = () => {
       <div className="bg-white shadow rounded-lg p-4">
         <h3 className="text-lg font-semibold mb-3">Player Progress</h3>
 
-        {users.map((u) => {
-          const userScans = scannedUsers.filter(s => s.userId === u.id);
-          const uniqueScans = new Set(userScans.map(s => s.qrName));
-          const count = uniqueScans.size;
-          const scanList = Array.from(uniqueScans);
+        {users.length === 0 ? (
+          <p className="text-gray-500 text-sm">No users yet...</p>
+        ) : (
+          users.map((u) => {
+            const userScans = scannedUsers.filter(s => s.userId === u.id);
+            const uniqueScans = new Set(userScans.map(s => s.qrName));
+            const count = uniqueScans.size;
+            const scanList = Array.from(uniqueScans);
 
-          return (
-            <div key={u.id} className="mb-4 p-4 border rounded-lg bg-gray-50">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex-1">
-                  <p className="font-bold text-lg">{u.username}</p>
-                  <p className="text-sm text-gray-600">User ID: {u.id}</p>
-                  
-                  {/* Progress Bar */}
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-semibold">{count}/8 unique scans</span>
-                      <span className="text-gray-500">{Math.round((count / 8) * 100)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className={`h-3 rounded-full transition-all ${
-                          count >= 8 ? "bg-green-500" : "bg-blue-500"
-                        }`}
-                        style={{ width: `${Math.min((count / 8) * 100, 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Scanned QR Codes */}
-                  {scanList.length > 0 && (
+            return (
+              <div key={u.id} className="mb-4 p-4 border rounded-lg bg-gray-50">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1">
+                    <p className="font-bold text-lg">{u.username}</p>
+                    <p className="text-sm text-gray-600">User ID: {u.id}</p>
+                    
+                    {/* Progress Bar */}
                     <div className="mt-2">
-                      <p className="text-xs font-semibold text-gray-700 mb-1">Scanned Codes:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {scanList.map((qr, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
-                          >
-                            {qr}
-                          </span>
-                        ))}
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-semibold">{count}/8 unique scans</span>
+                        <span className="text-gray-500">{Math.round((count / 8) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full transition-all ${
+                            count >= 8 ? "bg-green-500" : "bg-blue-500"
+                          }`}
+                          style={{ width: `${Math.min((count / 8) * 100, 100)}%` }}
+                        ></div>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <button
-                  onClick={() => {
-                    addDebugLog(`🖱️ Manual prize claim triggered for ${u.username}`, "info");
-                    handleClaimPrize(u.id);
-                  }}
-                  disabled={count < 8}
-                  className={`ml-4 px-6 py-3 rounded-lg font-semibold text-white transition-all ${
-                    count >= 8
-                      ? "bg-green-600 hover:bg-green-700 cursor-pointer"
-                      : "bg-gray-300 cursor-not-allowed"
-                  }`}
-                >
-                  {count >= 8 ? "Assign Prize" : `${8 - count} more needed`}
-                </button>
+                    {/* Scanned QR Codes */}
+                    {scanList.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-semibold text-gray-700 mb-1">Scanned Codes:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {scanList.map((qr, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
+                            >
+                              {qr}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      addDebugLog(`🖱️ Manual prize claim triggered for ${u.username}`, "info");
+                      handleClaimPrize(u.id);
+                    }}
+                    disabled={count !== 8}
+                    className={`ml-4 px-6 py-3 rounded-lg font-semibold text-white transition-all ${
+                      count === 8
+                        ? "bg-green-600 hover:bg-green-700 cursor-pointer"
+                        : "bg-gray-300 cursor-not-allowed"
+                    }`}
+                  >
+                    {count === 8 ? "Assign Prize" : count > 8 ? "Already Won" : `${8 - count} more needed`}
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* NOTIFICATION LOG */}
