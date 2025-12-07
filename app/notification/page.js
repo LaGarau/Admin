@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { realtimeDb } from "@/lib/firebase";
-import { ref, push, onValue, onChildAdded, update, get } from "firebase/database";
+import { ref, push, onValue, onChildAdded, update, get, set } from "firebase/database";
 import { IoMdNotificationsOutline } from "react-icons/io";
 
 const Notification = () => {
@@ -9,7 +9,7 @@ const Notification = () => {
   const [prizeCodes, setPrizeCodes] = useState([]);
   const [scannedUsers, setScannedUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [winningStatus, setWinningStatus] = useState({});
+  const [prizeWon, setPrizeWon] = useState({}); // NEW: Single source of truth
   const [debugLogs, setDebugLogs] = useState([]);
   const [showDebug, setShowDebug] = useState(true);
 
@@ -22,7 +22,7 @@ const Notification = () => {
       message,
       type,
       timestamp
-    }, ...prev].slice(0, 50)); // Keep last 50 logs
+    }, ...prev].slice(0, 50));
   };
 
   // ----------------------------------------------------
@@ -63,19 +63,21 @@ const Notification = () => {
         setNotifications(Object.keys(data).map(id => ({ id, ...data[id] })).reverse());
     });
 
-    // CRITICAL: Listen to winning status in real-time
-    onValue(ref(realtimeDb, "UsersWinningStatus"), (snap) => {
+    // 🔥 NEW: Listen to PrizeWon table - SINGLE SOURCE OF TRUTH
+    onValue(ref(realtimeDb, "PrizeWon"), (snap) => {
       const data = snap.val();
-      setWinningStatus(data || {});
+      setPrizeWon(data || {});
       if (data) {
-        const winnersCount = Object.values(data).filter(w => w.won).length;
-        addDebugLog(`🏆 Loaded winning status: ${winnersCount} players have won`, "info");
+        const winnersCount = Object.keys(data).length;
+        addDebugLog(`🏆 Loaded PrizeWon table: ${winnersCount} confirmed winners`, "success");
+      } else {
+        addDebugLog(`🏆 PrizeWon table is empty (no winners yet)`, "info");
       }
     });
   }, []);
 
   // ----------------------------------------------------
-  // 2) AUTO TRIGGER PRIZE - ONE WIN PER PLAYER ONLY
+  // 2) AUTO TRIGGER PRIZE - CHECK PRIZEWON TABLE FIRST
   // ----------------------------------------------------
   useEffect(() => {
     const scanRef = ref(realtimeDb, "scannedQRCodes");
@@ -87,13 +89,13 @@ const Notification = () => {
       const userId = scan.userId;
       addDebugLog(`🔔 New scan detected: ${scan.qrName} by user ${userId}`, "info");
 
-      // ⛔ CRITICAL CHECK #1: Has this user already won?
-      if (winningStatus[userId]?.won) {
-        addDebugLog(`🚫 BLOCKED: User ${userId} already won prize "${winningStatus[userId].prizeCode}". NO ACTION.`, "error");
+      // 🚨 CRITICAL CHECK #1: Check PrizeWon table FIRST
+      if (prizeWon[userId]) {
+        addDebugLog(`🚫 BLOCKED: User ${userId} found in PrizeWon table with prize "${prizeWon[userId].prizeCode}". NO ACTION.`, "error");
         return;
       }
 
-      // ⛔ CRITICAL CHECK #2: Prevent concurrent processing
+      // 🚨 CRITICAL CHECK #2: Prevent concurrent processing
       if (processingRef.current.has(userId)) {
         addDebugLog(`⏸️ User ${userId} already being processed, skipping...`, "warning");
         return;
@@ -101,7 +103,15 @@ const Notification = () => {
       processingRef.current.add(userId);
 
       try {
-        // Get current scan count
+        // 🚨 CRITICAL CHECK #3: Double-check PrizeWon from database
+        const prizeWonCheck = await get(ref(realtimeDb, `PrizeWon/${userId}`));
+        if (prizeWonCheck.exists()) {
+          addDebugLog(`🚫 RACE CONDITION BLOCKED: User ${userId} already in PrizeWon table!`, "error");
+          processingRef.current.delete(userId);
+          return;
+        }
+
+        // Count unique scans
         const scansSnap = await get(scanRef);
         const allScans = scansSnap.val() || {};
         const userScans = Object.values(allScans).filter(s => s.userId === userId);
@@ -109,31 +119,25 @@ const Notification = () => {
         
         addDebugLog(`📊 User ${userId} has ${uniqueCount} unique scans`, "info");
 
-        // ⛔ CRITICAL CHECK #3: Exactly 8 scans required
+        // 🎯 ONLY trigger at EXACTLY 8 scans
         if (uniqueCount === 8) {
-          // Double-check winning status again before proceeding
-          const winCheckSnap = await get(ref(realtimeDb, `UsersWinningStatus/${userId}`));
-          if (winCheckSnap.val()?.won) {
-            addDebugLog(`🚫 Race condition detected! User ${userId} already won. Aborting.`, "error");
-            processingRef.current.delete(userId);
-            return;
-          }
-
-          addDebugLog(`✅ User ${userId} reached exactly 8 scans and has NOT won yet. Processing...`, "success");
+          addDebugLog(`✅ User ${userId} reached EXACTLY 8 scans! Processing prize...`, "success");
           await handleClaimPrize(userId);
-        } else if (uniqueCount > 8) {
-          addDebugLog(`⚠️ User ${userId} has ${uniqueCount} scans (>8). Should have already won.`, "warning");
+        } else if (uniqueCount < 8) {
+          addDebugLog(`⏳ User ${userId} needs ${8 - uniqueCount} more scans`, "info");
         } else {
-          addDebugLog(`⏳ User ${userId} needs ${8 - uniqueCount} more unique scans`, "info");
+          addDebugLog(`⚠️ User ${userId} has ${uniqueCount} scans (>8 but not in PrizeWon table - possible issue)`, "warning");
         }
+      } catch (error) {
+        addDebugLog(`❌ Error processing scan: ${error.message}`, "error");
       } finally {
         processingRef.current.delete(userId);
       }
     });
-  }, [winningStatus, prizeCodes, users]);
+  }, [prizeWon, prizeCodes, users]);
 
   // ----------------------------------------------------
-  // 3) CLAIM PRIZE - ABSOLUTE ONE WIN PER PLAYER RULE
+  // 3) CLAIM PRIZE - POST TO PRIZEWON TABLE
   // ----------------------------------------------------
   const handleClaimPrize = async (userId) => {
     const user = users.find(u => u.id === userId);
@@ -142,21 +146,22 @@ const Notification = () => {
       return;
     }
 
-    addDebugLog(`🎁 [PRIZE ASSIGNMENT START] User: ${user.username}`, "info");
+    addDebugLog(`🎁 ========== PRIZE ASSIGNMENT START: ${user.username} ==========`, "info");
 
     try {
-      // ⛔ ABSOLUTE CHECK: Has user already won?
-      addDebugLog(`🔍 Step 1: Checking winning status for ${user.username}...`, "info");
-      const winSnap = await get(ref(realtimeDb, `UsersWinningStatus/${userId}`));
-      const existingWin = winSnap.val();
+      // 🚨 STEP 1: Check PrizeWon table (SINGLE SOURCE OF TRUTH)
+      addDebugLog(`🔍 Step 1: Checking PrizeWon table for ${user.username}...`, "info");
+      const prizeWonCheck = await get(ref(realtimeDb, `PrizeWon/${userId}`));
       
-      if (existingWin?.won) {
-        addDebugLog(`🚫🚫🚫 ABORT: ${user.username} ALREADY WON prize "${existingWin.prizeCode}" at ${new Date(existingWin.wonAt).toLocaleString()}`, "error");
+      if (prizeWonCheck.exists()) {
+        const existing = prizeWonCheck.val();
+        addDebugLog(`🚫🚫🚫 ABORT: ${user.username} already in PrizeWon table!`, "error");
+        addDebugLog(`🚫 Prize: "${existing.prizeCode}" won at ${new Date(existing.wonAt).toLocaleString()}`, "error");
         return;
       }
-      addDebugLog(`✅ Step 1 passed: ${user.username} has NOT won yet`, "success");
+      addDebugLog(`✅ Step 1: ${user.username} NOT in PrizeWon table`, "success");
 
-      // Verify exact scan count
+      // 🚨 STEP 2: Verify EXACTLY 8 scans
       addDebugLog(`🔍 Step 2: Verifying scan count...`, "info");
       const scansSnap = await get(ref(realtimeDb, "scannedQRCodes"));
       const allScans = scansSnap.val() || {};
@@ -164,29 +169,33 @@ const Notification = () => {
       const uniqueCount = new Set(userScans.map(s => s.qrName)).size;
 
       if (uniqueCount !== 8) {
-        addDebugLog(`🚫 ABORT: ${user.username} has ${uniqueCount} scans, not exactly 8`, "error");
+        addDebugLog(`🚫 ABORT: ${user.username} has ${uniqueCount} scans, not EXACTLY 8`, "error");
         return;
       }
-      addDebugLog(`✅ Step 2 passed: ${user.username} has exactly 8 unique scans`, "success");
+      addDebugLog(`✅ Step 2: ${user.username} has EXACTLY 8 unique scans`, "success");
 
-      // Check available prizes
+      // 🚨 STEP 3: Check available prizes
       addDebugLog(`🔍 Step 3: Checking available prizes...`, "info");
-      const available = prizeCodes.filter(p => !p.used);
+      const availableSnap = await get(ref(realtimeDb, "PrizeCodes"));
+      const allPrizes = availableSnap.val() || {};
+      const available = Object.keys(allPrizes)
+        .map(id => ({ id, ...allPrizes[id] }))
+        .filter(p => !p.used);
       
       if (available.length === 0) {
-        addDebugLog(`❌ ABORT: No prizes available in pool`, "error");
+        addDebugLog(`❌ ABORT: No prizes available`, "error");
         return;
       }
-      addDebugLog(`✅ Step 3 passed: ${available.length} prizes available`, "success");
+      addDebugLog(`✅ Step 3: ${available.length} prizes available`, "success");
 
-      // Select random prize
+      // 🚨 STEP 4: Select random prize
       addDebugLog(`🎲 Step 4: Selecting random prize...`, "info");
       const randomIndex = Math.floor(Math.random() * available.length);
       const selectedPrize = available[randomIndex];
-      addDebugLog(`✅ Step 4: Selected prize "${selectedPrize.code}" (option ${randomIndex + 1}/${available.length})`, "success");
+      addDebugLog(`✅ Step 4: Selected "${selectedPrize.code}" (${randomIndex + 1}/${available.length})`, "success");
 
-      // Mark prize as used
-      addDebugLog(`💾 Step 5: Marking prize "${selectedPrize.code}" as USED...`, "info");
+      // 🚨 STEP 5: Mark prize as used
+      addDebugLog(`💾 Step 5: Marking prize as USED in PrizeCodes...`, "info");
       await update(ref(realtimeDb, `PrizeCodes/${selectedPrize.id}`), {
         used: true,
         assignedTo: userId,
@@ -194,18 +203,32 @@ const Notification = () => {
       });
       addDebugLog(`✅ Step 5: Prize marked as used`, "success");
 
-      // ⭐ CRITICAL: Mark user as winner (THIS IS THE ONLY PLACE THIS HAPPENS)
-      addDebugLog(`🏆 Step 6: Marking ${user.username} as WINNER (ONE TIME ONLY)...`, "info");
+      // 🔥🔥🔥 STEP 6: POST TO PRIZEWON TABLE (SINGLE SOURCE OF TRUTH)
+      addDebugLog(`🏆 Step 6: POSTING TO PRIZEWON TABLE...`, "info");
+      const wonData = {
+        userId: userId,
+        username: user.username,
+        prizeCode: selectedPrize.code,
+        prizeId: selectedPrize.id,
+        wonAt: Date.now(),
+        scannedCodes: Array.from(new Set(userScans.map(s => s.qrName)))
+      };
+      
+      await set(ref(realtimeDb, `PrizeWon/${userId}`), wonData);
+      addDebugLog(`✅ Step 6: ${user.username} POSTED TO PRIZEWON TABLE`, "success");
+
+      // STEP 7: Update old UsersWinningStatus for backward compatibility
+      addDebugLog(`📝 Step 7: Updating UsersWinningStatus...`, "info");
       await update(ref(realtimeDb, `UsersWinningStatus/${userId}`), {
         won: true,
         prizeCode: selectedPrize.code,
         wonAt: Date.now(),
         username: user.username,
       });
-      addDebugLog(`✅ Step 6: User marked as winner in database`, "success");
+      addDebugLog(`✅ Step 7: UsersWinningStatus updated`, "success");
 
-      // Create notification
-      addDebugLog(`📢 Step 7: Creating win notification...`, "info");
+      // STEP 8: Create notification
+      addDebugLog(`📢 Step 8: Creating notification...`, "info");
       await push(ref(realtimeDb, "notifications"), {
         message: `🎉 ${user.username} completed 8 scans and won: ${selectedPrize.code}`,
         username: user.username,
@@ -213,12 +236,13 @@ const Notification = () => {
         status: "success",
         createdAt: Date.now(),
       });
-      addDebugLog(`✅ Step 7: Notification created`, "success");
+      addDebugLog(`✅ Step 8: Notification created`, "success");
 
-      addDebugLog(`🎊🎊🎊 [SUCCESS] ${user.username} won prize "${selectedPrize.code}"! This user can NEVER win again.`, "success");
+      addDebugLog(`🎊🎊🎊 SUCCESS: ${user.username} won "${selectedPrize.code}"! Entry locked in PrizeWon table.`, "success");
+      addDebugLog(`========== PRIZE ASSIGNMENT COMPLETE ==========`, "success");
 
     } catch (err) {
-      addDebugLog(`❌❌❌ CRITICAL ERROR in prize assignment: ${err.message}`, "error");
+      addDebugLog(`❌❌❌ CRITICAL ERROR: ${err.message}`, "error");
       console.error("Prize assignment error:", err);
     }
   };
@@ -296,16 +320,41 @@ const Notification = () => {
           <p className="text-3xl font-bold text-purple-800">{scannedUsers.length}</p>
         </div>
         <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
-          <p className="text-sm text-orange-600 font-semibold">Winners</p>
+          <p className="text-sm text-orange-600 font-semibold">🏆 Winners (PrizeWon)</p>
           <p className="text-3xl font-bold text-orange-800">
-            {Object.values(winningStatus).filter(w => w.won).length}
+            {Object.keys(prizeWon).length}
           </p>
         </div>
       </div>
 
+      {/* PRIZEWON TABLE VIEW */}
+      <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-orange-300 rounded-lg p-4">
+        <h3 className="text-lg font-bold mb-3 text-orange-800">🏆 PrizeWon Table (Source of Truth)</h3>
+        {Object.keys(prizeWon).length === 0 ? (
+          <p className="text-gray-600 text-sm">No winners recorded yet...</p>
+        ) : (
+          <div className="space-y-2">
+            {Object.entries(prizeWon).map(([userId, data]) => (
+              <div key={userId} className="bg-white p-3 rounded-lg border border-orange-200 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-gray-800">{data.username}</p>
+                  <p className="text-xs text-gray-600">User ID: {userId}</p>
+                  <p className="text-sm font-mono bg-yellow-100 px-2 py-1 rounded mt-1 inline-block">
+                    Prize: {data.prizeCode}
+                  </p>
+                </div>
+                <div className="text-right text-xs text-gray-500">
+                  {new Date(data.wonAt).toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* PLAYER PROGRESS */}
       <div className="bg-white shadow rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-3">Player Progress (ONE WIN PER PLAYER ONLY)</h3>
+        <h3 className="text-lg font-semibold mb-3">Player Progress</h3>
 
         {users.length === 0 ? (
           <p className="text-gray-500 text-sm">No users yet...</p>
@@ -315,11 +364,10 @@ const Notification = () => {
             const uniqueScans = new Set(userScans.map(s => s.qrName));
             const count = uniqueScans.size;
             const scanList = Array.from(uniqueScans);
-            const hasWon = winningStatus[u.id]?.won;
-            const wonPrize = winningStatus[u.id]?.prizeCode;
+            const hasWon = prizeWon[u.id]; // Check PrizeWon table
 
             return (
-              <div key={u.id} className={`mb-4 p-4 border-2 rounded-lg ${hasWon ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+              <div key={u.id} className={`mb-4 p-4 border-2 rounded-lg ${hasWon ? 'bg-green-50 border-green-400' : 'bg-gray-50 border-gray-200'}`}>
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -333,12 +381,15 @@ const Notification = () => {
                     <p className="text-sm text-gray-600">User ID: {u.id}</p>
                     
                     {hasWon && (
-                      <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded">
+                      <div className="mt-2 p-3 bg-yellow-100 border-2 border-yellow-400 rounded">
                         <p className="text-sm font-bold text-yellow-900">
-                          Won Prize: <span className="font-mono">{wonPrize}</span>
+                          🎁 Won Prize: <span className="font-mono text-lg">{hasWon.prizeCode}</span>
+                        </p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          Won at: {new Date(hasWon.wonAt).toLocaleString()}
                         </p>
                         <p className="text-xs text-yellow-700">
-                          Won at: {new Date(winningStatus[u.id].wonAt).toLocaleString()}
+                          Recorded in PrizeWon table ✓
                         </p>
                       </div>
                     )}
@@ -391,7 +442,7 @@ const Notification = () => {
                         : "bg-gray-300 cursor-not-allowed"
                     }`}
                   >
-                    {hasWon ? "🏆 Already Won" : count === 8 ? "Assign Prize" : `${8 - count} more needed`}
+                    {hasWon ? "🏆 Won" : count === 8 ? "Assign Prize" : `Need ${8 - count} more`}
                   </button>
                 </div>
               </div>
@@ -402,7 +453,7 @@ const Notification = () => {
 
       {/* NOTIFICATION LOG */}
       <div className="bg-gray-50 rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-2">🏆 Live Wins</h3>
+        <h3 className="text-lg font-semibold mb-2">🏆 Live Wins (Last 10)</h3>
 
         {notifications.filter(n => n.status === "success").length === 0 ? (
           <p className="text-gray-500 text-sm">No winners yet...</p>
