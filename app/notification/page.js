@@ -194,14 +194,8 @@ const Notification = () => {
       const selectedPrize = available[randomIndex];
       addDebugLog(`✅ Step 4: Selected "${selectedPrize.code}" (${randomIndex + 1}/${available.length})`, "success");
 
-      // 🚨 STEP 5: Mark prize as used
-      addDebugLog(`💾 Step 5: Marking prize as USED in PrizeCodes...`, "info");
-      await update(ref(realtimeDb, `PrizeCodes/${selectedPrize.id}`), {
-        used: true,
-        assignedTo: userId,
-        assignedAt: Date.now(),
-      });
-      addDebugLog(`✅ Step 5: Prize marked as used`, "success");
+      // STEP 5: Skip updating PrizeCodes (it's just a count table)
+      addDebugLog(`⏭️ Step 5: Skipping PrizeCodes update (count table only)`, "info");
 
       // 🔥🔥🔥 STEP 6: POST TO PRIZEWON TABLE (SINGLE SOURCE OF TRUTH)
       addDebugLog(`🏆 Step 6: POSTING TO PRIZEWON TABLE...`, "info");
