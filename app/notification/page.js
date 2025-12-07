@@ -105,7 +105,7 @@ const Notification = () => {
 
       // Log notification
       await push(ref(realtimeDb, "notifications"), {
-        message: 🎉 ${user.username} completed all scans and won: ${selectedPrize.code},
+        message: `🎉 ${user.username} completed all scans and won: ${selectedPrize.code}`,
         username: user.username,
         prizeCode: selectedPrize.code,
         status: "success",
