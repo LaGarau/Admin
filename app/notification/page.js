@@ -23,7 +23,7 @@ const Notification = () => {
   const [prizeCodes, setPrizeCodes] = useState([]);
   const [scannedUsers, setScannedUsers] = useState([]);
   const processingRef = useRef(new Set());
-  const userLockRef = useRef(new Set()); // ADD THIS: Prevent same user processing twice
+  const userLockRef = useRef(new Set());
   const initialLoadRef = useRef(true);
 
   // --- FETCH USERS ---
@@ -76,12 +76,10 @@ const Notification = () => {
           ...data[key],
         }));
 
-        // Remove duplicates based on username + prizeCode + qrName combination
         const seen = new Map();
         const deduped = notifList.filter((notif) => {
           const key = `${notif.username}-${notif.prizeCode}-${notif.qrName}`;
           if (seen.has(key)) {
-            // Delete the duplicate from Firebase
             remove(ref(realtimeDb, `notifications/${notif.id}`));
             return false;
           }
@@ -99,7 +97,6 @@ const Notification = () => {
     const scannedRef = ref(realtimeDb, "scannedQRCodes");
 
     const unsubscribe = onChildAdded(scannedRef, async (snapshot) => {
-      // Skip initial load - only process new scans after component mounts
       if (initialLoadRef.current) {
         return;
       }
@@ -109,30 +106,25 @@ const Notification = () => {
 
       console.log(`\n🔍 New scan detected: ${scanId} for user: ${scan.userId}`);
 
-      // Skip if already processed or currently processing THIS SCAN
       if (scan.processed || processingRef.current.has(scanId)) {
         console.log(`⏭️ SKIP: Scan already processed`);
         return;
       }
 
-      // 🔒 NEW: Skip if this USER is currently being processed
       if (userLockRef.current.has(scan.userId)) {
         console.log(`⏭️ SKIP: User ${scan.userId} is already being processed`);
         return;
       }
 
-      // Lock BOTH the scan and the user
       processingRef.current.add(scanId);
-      userLockRef.current.add(scan.userId); // 🔒 LOCK USER
+      userLockRef.current.add(scan.userId);
 
-      // Mark as processing in Firebase IMMEDIATELY
       await update(ref(realtimeDb, `scannedQRCodes/${scanId}`), {
         processing: true,
       });
 
       try {
         console.log("=== PROCESSING NEW SCAN ===");
-        console.log("Scan ID:", scanId);
         console.log("User ID:", scan.userId);
         console.log("QR Info - qrId:", scan.qrId, "qrName:", scan.qrName);
 
@@ -143,7 +135,7 @@ const Notification = () => {
           username = userSnap.val()?.username || "Unknown";
         }
 
-        // 🎯 CRITICAL CHECK: Has user already won?
+        // CHECK: Has user already won?
         const userStatusSnap = await get(ref(realtimeDb, `UsersWinningStatus/${scan.userId}`));
         const userStatus = userStatusSnap.val();
 
@@ -164,10 +156,75 @@ const Notification = () => {
             scan.qrId
           );
           
-          return; // EXIT - User already has prize
+          return;
         }
 
-        // Get fresh prize codes data
+        // GET USER'S SCAN HISTORY
+        const userScansRef = ref(realtimeDb, `UserScanHistory/${scan.userId}`);
+        const userScansSnap = await get(userScansRef);
+        const scanHistory = userScansSnap.val() || {};
+
+        // Check if this QR was already scanned
+        if (scanHistory[scan.qrId]) {
+          console.log(`⚠️ User already scanned this QR: ${scan.qrName}`);
+          await update(ref(realtimeDb, `scannedQRCodes/${scanId}`), {
+            processed: true,
+            duplicateQRScan: true,
+          });
+          await sendNotification(username, scan.qrName, null, "duplicate_qr", scan.qrId);
+          return;
+        }
+
+        // Record this scan
+        await update(userScansRef, {
+          [scan.qrId]: {
+            qrName: scan.qrName,
+            scannedAt: Date.now(),
+          }
+        });
+
+        // Count unique QRs scanned (including this one)
+        const uniqueQRsScanned = Object.keys(scanHistory).length + 1;
+        console.log(`📊 User has scanned ${uniqueQRsScanned}/8 unique QRs`);
+
+        // WINNING LOGIC
+        let shouldWin = false;
+        let winReason = "";
+
+        if (uniqueQRsScanned >= 8) {
+          // 8th unique QR → GUARANTEED WIN
+          shouldWin = true;
+          winReason = "guaranteed_8th_scan";
+          console.log("🎉 GUARANTEED WIN - 8th QR scanned!");
+        } else {
+          // Random chance: 16.7% (1 in 6)
+          const roll = Math.random();
+          shouldWin = roll < 0.167;
+          winReason = shouldWin ? "random_win" : "random_lose";
+          console.log(`🎲 Random roll: ${(roll * 100).toFixed(1)}% (need <16.7%) → ${shouldWin ? "WIN!" : "Lose"}`);
+        }
+
+        // If didn't win
+        if (!shouldWin) {
+          console.log(`😔 No prize this time. User has ${8 - uniqueQRsScanned} more chances.`);
+          await update(ref(realtimeDb, `scannedQRCodes/${scanId}`), {
+            processed: true,
+            didNotWin: true,
+            uniqueQRsScanned,
+            remainingChances: 8 - uniqueQRsScanned,
+          });
+          await sendNotification(
+            username, 
+            scan.qrName, 
+            null, 
+            "no_win_yet",
+            scan.qrId,
+            { uniqueQRsScanned, remainingChances: 8 - uniqueQRsScanned }
+          );
+          return;
+        }
+
+        // User won! Now get prizes
         const prizeSnapshot = await get(ref(realtimeDb, "PrizeCodes"));
         const prizeData = prizeSnapshot.val();
 
@@ -175,19 +232,19 @@ const Notification = () => {
           console.log("❌ No prizes available");
           await update(ref(realtimeDb, `scannedQRCodes/${scanId}`), { 
             processed: true,
-            noPrizesAvailable: true 
+            noPrizesAvailable: true,
+            wonButNoPrizes: true,
           });
           await sendNotification(username, scan.qrName, null, "no_prizes", scan.qrId);
           return;
         }
 
-        // Get all prizes
         const allPrizes = Object.keys(prizeData).map((key) => ({
           id: key,
           ...prizeData[key],
         }));
 
-        // MATCHING LOGIC - Try different strategies
+        // Try to match prizes
         let availablePrizes = allPrizes.filter((p) => 
           !p.used && p.qrId === scan.qrId && p.qrName === scan.qrName
         );
@@ -201,28 +258,27 @@ const Notification = () => {
         }
 
         if (availablePrizes.length === 0) {
-          console.log(`❌ No prizes for this QR`);
+          console.log(`❌ User won but no prizes for this QR`);
           await update(ref(realtimeDb, `scannedQRCodes/${scanId}`), { 
             processed: true,
-            noPrizesForThisQR: true,
+            wonButNoPrizesForQR: true,
           });
           await sendNotification(username, scan.qrName, null, "out_of_prizes", scan.qrId);
           return;
         }
 
-        // Select the first available prize
+        // Assign prize!
         const selectedPrize = availablePrizes[0];
-        console.log(`✅ Assigning prize ${selectedPrize.code} to ${username}`);
+        console.log(`✅ Assigning prize ${selectedPrize.code} to ${username} (${winReason})`);
 
-        // Update prize as used
         await update(ref(realtimeDb, `PrizeCodes/${selectedPrize.id}`), {
           used: true,
           assignedTo: scan.userId,
           assignedToUsername: username,
           assignedAt: Date.now(),
+          winReason,
         });
 
-        // Store in PrizeStatus
         await push(ref(realtimeDb, "PrizeStatus"), {
           userId: scan.userId,
           username,
@@ -231,9 +287,10 @@ const Notification = () => {
           qrId: selectedPrize.qrId,
           qrName: selectedPrize.qrName,
           assignedAt: new Date().toISOString(),
+          uniqueQRsScanned,
+          winReason,
         });
 
-        // 🎯 Update user winning status (IMPORTANT!)
         await update(ref(realtimeDb, `UsersWinningStatus/${scan.userId}`), {
           won: true,
           prizeCode: selectedPrize.code,
@@ -241,16 +298,17 @@ const Notification = () => {
           qrId: selectedPrize.qrId,
           qrName: selectedPrize.qrName,
           wonAt: Date.now(),
+          uniqueQRsScanned,
+          winReason,
         });
 
-        // Update the scan record
         await update(ref(realtimeDb, `scannedQRCodes/${scanId}`), {
           prizeCode: selectedPrize.code,
           processed: true,
           assignedAt: Date.now(),
+          winReason,
         });
 
-        // Send success notification
         await sendNotification(username, scan.qrName, selectedPrize.code, "success", scan.qrId);
 
         console.log(`✅ Successfully assigned ${selectedPrize.code} to ${username}`);
@@ -262,14 +320,12 @@ const Notification = () => {
           error: error.message,
         });
       } finally {
-        // ALWAYS unlock BOTH
         processingRef.current.delete(scanId);
-        userLockRef.current.delete(scan.userId); // 🔓 UNLOCK USER
+        userLockRef.current.delete(scan.userId);
         console.log(`🔓 UNLOCKED: Scan ${scanId} and User ${scan.userId}`);
       }
     });
 
-    // Mark initial load as complete after 2 seconds
     const timer = setTimeout(() => {
       initialLoadRef.current = false;
       console.log("🎯 Now listening for NEW scans only");
@@ -281,7 +337,7 @@ const Notification = () => {
     };
   }, []);
 
-  const sendNotification = async (username, qrName, prizeCode, status, qrId) => {
+  const sendNotification = async (username, qrName, prizeCode, status, qrId, extraData = {}) => {
     const notifRef = ref(realtimeDb, "notifications");
     const snapshot = await get(notifRef);
     const existingNotifs = snapshot.val();
@@ -304,13 +360,20 @@ const Notification = () => {
     
     switch(status) {
       case "success":
-        message = `🎉 ${username} scanned ${qrName} — Congratulations! Prize Code: ${prizeCode}`;
+        message = `🎉 ${username} scanned ${qrName} — WINNER! Prize Code: ${prizeCode}`;
         break;
       case "already_won":
-        message = `${username} scanned ${qrName} — You've already won! Your prize code: ${prizeCode}`;
+        message = `${username} scanned ${qrName} — You've already won! Your prize: ${prizeCode}`;
+        break;
+      case "no_win_yet":
+        const remaining = extraData.remainingChances || 0;
+        message = `${username} scanned ${qrName} — Not this time! ${remaining} more ${remaining === 1 ? 'chance' : 'chances'} remaining.`;
+        break;
+      case "duplicate_qr":
+        message = `${username} scanned ${qrName} — You already scanned this QR! Try other locations.`;
         break;
       case "out_of_prizes":
-        message = `${username} scanned ${qrName} — Sorry! All prizes for this QR are claimed. Keep scanning other QRs!`;
+        message = `${username} scanned ${qrName} — Sorry! All prizes for this QR are claimed.`;
         break;
       case "no_prizes":
         message = `${username} scanned ${qrName} — No prizes available in the system.`;
@@ -328,6 +391,7 @@ const Notification = () => {
       status,
       createdAt: Date.now(),
       imgUrl: "",
+      ...extraData,
     };
     
     await push(ref(realtimeDb, "notifications"), payload);
@@ -415,15 +479,16 @@ const Notification = () => {
       {/* Debug Info Section */}
       <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="text-lg font-semibold mb-2 text-blue-800">
-          🔍 Debug Info - Prize Codes Status
+          🔍 Debug Info - Prize System
         </h3>
         <div className="space-y-2 text-sm">
+          <p><strong>🎲 System:</strong> Guaranteed win within 8 unique QR scans</p>
+          <p><strong>📊 Odds per scan:</strong> 16.7% (1 in 6 chance)</p>
+          <p><strong>🎯 8th scan:</strong> 100% guaranteed win</p>
+          <hr className="my-2"/>
           <p><strong>Total Prize Codes:</strong> {prizeCodes.length}</p>
           <p><strong>Unused Prizes:</strong> {prizeCodes.filter(p => !p.used).length}</p>
           <p><strong>Used Prizes:</strong> {prizeCodes.filter(p => p.used).length}</p>
-          <p className="text-red-600 font-bold">
-            ⚠️ Target: 110 prizes total (8 QR codes, first 110 players win)
-          </p>
           {prizeCodes.filter(p => !p.used).length > 0 && (
             <div className="mt-2">
               <p className="font-semibold text-blue-700">Available Prizes:</p>
@@ -440,7 +505,7 @@ const Notification = () => {
         </div>
       </div>
 
-      {/* Scanned Users / Assigned Prizes */}
+      {/* Scanned Users */}
       <div className="mt-8">
         <h3 className="text-xl font-semibold mb-4">
           Scanned Users ({scannedUsers.length})
@@ -474,6 +539,11 @@ const Notification = () => {
                   <p className="text-xs text-gray-500">
                     QR ID: {scan.qrId || "N/A"}
                   </p>
+                  {scan.uniqueQRsScanned && (
+                    <p className="text-xs text-blue-600 font-semibold">
+                      Progress: {scan.uniqueQRsScanned}/8 unique QRs
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500">
                     Time:{" "}
                     {scan.scannedAt
@@ -485,32 +555,38 @@ const Notification = () => {
                   {scan.prizeCode ? (
                     <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 rounded-xl text-center shadow-md mt-2">
                       <p className="text-sm font-semibold mb-1">
-                        🎉 PRIZE CODE
+                        🎉 WINNER! PRIZE CODE
                       </p>
                       <p className="text-3xl font-bold font-mono tracking-wider">
                         {scan.prizeCode}
                       </p>
+                      {scan.winReason === "guaranteed_8th_scan" && (
+                        <p className="text-xs mt-2 opacity-90">
+                          ⭐ Guaranteed 8th scan win!
+                        </p>
+                      )}
                     </div>
                   ) : scan.alreadyWon ? (
                     <div className="bg-orange-500 text-white p-4 rounded-lg text-center">
                       <p className="text-sm font-semibold">⚠️ Already Won</p>
                       <p className="text-xs mt-1">
-                        User already claimed: {scan.existingPrizeCode}
+                        Prize: {scan.existingPrizeCode}
                       </p>
                     </div>
-                  ) : scan.noPrizesForThisQR ? (
-                    <div className="bg-blue-500 text-white p-4 rounded-lg text-center">
-                      <p className="text-sm font-semibold">📢 Keep Scanning!</p>
+                  ) : scan.didNotWin ? (
+                    <div className="bg-yellow-400 text-gray-800 p-4 rounded-lg text-center">
+                      <p className="text-sm font-semibold">🎲 Not This Time!</p>
                       <p className="text-xs mt-1">
-                        All prizes for this QR are claimed
+                        {scan.remainingChances} more {scan.remainingChances === 1 ? 'chance' : 'chances'} left
                       </p>
                     </div>
-                  ) : scan.noPrizesAvailable ? (
-                    <div className="bg-gray-400 text-white p-4 rounded-lg text-center">
-                      <p className="text-sm">❌ No prizes in system</p>
+                  ) : scan.duplicateQRScan ? (
+                    <div className="bg-purple-400 text-white p-4 rounded-lg text-center">
+                      <p className="text-sm font-semibold">♻️ Already Scanned</p>
+                      <p className="text-xs mt-1">Try other QRs!</p>
                     </div>
                   ) : scan.processing ? (
-                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 p-4 rounded-lg text-center">
+                    <div className="bg-blue-100 border border-blue-400 text-blue-700 p-4 rounded-lg text-center">
                       <p className="text-sm font-semibold">⏳ Processing...</p>
                     </div>
                   ) : (
@@ -574,7 +650,7 @@ const Notification = () => {
                   {item.prizeCode && item.status === "success" && (
                     <div className="bg-green-500 text-white p-6 rounded-xl shadow-2xl text-center mt-2">
                       <p className="text-2xl font-bold mb-2">
-                        CONGRATULATIONS!
+                        🎉 WINNER!
                       </p>
                       <p className="text-4xl font-mono tracking-wider">
                         {item.prizeCode}
