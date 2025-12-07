@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { realtimeDb } from "@/lib/firebase";
-import { ref, push, onValue, onChildAdded, remove, update, get } from "firebase/database";
+import { ref, push, onValue, update, get } from "firebase/database";
 import { IoMdNotificationsOutline } from "react-icons/io";
 
 const Notification = () => {
@@ -9,11 +9,9 @@ const Notification = () => {
   const [prizeCodes, setPrizeCodes] = useState([]);
   const [scannedUsers, setScannedUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
-
   const processingRef = useRef(new Set());
-  const initialLoadRef = useRef(true);
 
-  // 1. FETCH DATABASE VALUES
+  // --- 1. REAL-TIME DATA SYNC ---
   useEffect(() => {
     onValue(ref(realtimeDb, "Users"), (snap) => {
       const data = snap.val();
@@ -32,135 +30,138 @@ const Notification = () => {
 
     onValue(ref(realtimeDb, "notifications"), (snap) => {
       const data = snap.val();
-      if (data) {
-        const list = Object.keys(data).map(key => ({ id: key, ...data[key] }));
-        setNotifications(list.reverse());
-      }
+      if (data) setNotifications(Object.keys(data).map(key => ({ id: key, ...data[key] })).reverse());
     });
   }, []);
 
-
-  // 2. AUTO TRACK SCANS (NO PRIZE)
+  // --- 2. AUTO-DETECT PRIZE ELIGIBILITY ---
   useEffect(() => {
-    const scannedRef = ref(realtimeDb, "scannedQRCodes");
-    const unsub = onChildAdded(scannedRef, async (snapshot) => {
-      if (initialLoadRef.current) return;
+    if (users.length === 0 || scannedUsers.length === 0) return;
 
-      const scanId = snapshot.key;
-      const scan = snapshot.val();
+    users.forEach(async (user) => {
+      // Skip if already processing this user
+      if (processingRef.current.has(user.id)) return;
 
-      if (scan.processed || processingRef.current.has(scanId)) return;
-      processingRef.current.add(scanId);
+      // Count unique scans for this user
+      const userScans = scannedUsers.filter(s => s.userId === user.id);
+      const uniqueScans = new Set(userScans.map(s => s.qrName)).size;
 
-      try {
-        await update(ref(realtimeDb, scannedQRCodes/${scanId}), {
-          processed: true,
-          status: "tracked",
-        });
-      } finally {
-        processingRef.current.delete(scanId);
+      // Generate random target between 8-10
+      const requiredScans = Math.floor(Math.random() * 3) + 8; // 8, 9, or 10
+
+      // Check if eligible AND not already won
+      if (uniqueScans >= requiredScans) {
+        try {
+          processingRef.current.add(user.id);
+
+          // Double-check winning status
+          const statusSnap = await get(ref(realtimeDb, UsersWinningStatus/${user.id}));
+          if (statusSnap.val()?.won) {
+            processingRef.current.delete(user.id);
+            return; // Already won
+          }
+
+          // Assign prize automatically
+          await assignPrizeToUser(user.id);
+        } catch (error) {
+          console.error("Auto-assign error:", error);
+          processingRef.current.delete(user.id);
+        }
       }
     });
+  }, [scannedUsers, users]); // Trigger when scans or users update
 
-    const t = setTimeout(() => { initialLoadRef.current = false; }, 2000);
-    return () => { unsub(); clearTimeout(t); };
-  }, []);
-
-
-  // 3. CLAIM PRIZE FUNCTION (FIXED DUPLICATE ISSUE)
-  const handleClaimPrize = async (userId) => {
+  // --- 3. PRIZE ASSIGNMENT LOGIC ---
+  const assignPrizeToUser = async (userId) => {
     const user = users.find(u => u.id === userId);
-    if (!user) return alert("User not found");
+    if (!user) return;
 
-    // Get user scans
-    const userScans = scannedUsers.filter(s => s.userId === userId);
-    const uniqueScanNames = new Set(userScans.map(s => s.qrName));
-    if (uniqueScanNames.size < 8) {
-      return alert(User has only scanned ${uniqueScanNames.size}/8 items);
+    // Get available prizes
+    const availablePrizes = prizeCodes.filter(p => !p.used);
+    if (availablePrizes.length === 0) {
+      await push(ref(realtimeDb, "notifications"), {
+        message: ⚠️ ${user.username} qualified but no prizes left!,
+        username: user.username,
+        status: "error",
+        createdAt: Date.now()
+      });
+      processingRef.current.delete(userId);
+      return;
     }
 
-    // Check winning status (already won?)
-    const winSnap = await get(ref(realtimeDb, UsersWinningStatus/${userId}));
-    if (winSnap.val()?.won) return alert("User already claimed prize!");
-
-    // Select available prize
-    const available = prizeCodes.filter(p => !p.used);
-    if (available.length === 0) return alert("No prizes left!");
-    const prize = available[0];
+    const selectedPrize = availablePrizes[0];
 
     try {
-      // Mark prize used
-      await update(ref(realtimeDb, PrizeCodes/${prize.id}), {
+      // Mark prize as used
+      await update(ref(realtimeDb, PrizeCodes/${selectedPrize.id}), {
         used: true,
         assignedTo: userId,
         assignedAt: Date.now()
       });
 
-      // Set win status
+      // Update user winning status
       await update(ref(realtimeDb, UsersWinningStatus/${userId}), {
         won: true,
-        prizeCode: prize.code,
+        prizeCode: selectedPrize.code,
         wonAt: Date.now()
       });
 
-      // ----- CHECK IF NOTIFICATION EXISTS -----
-      const notifSnap = await get(ref(realtimeDb, "notifications"));
-      if (notifSnap.exists()) {
-        const notifData = notifSnap.val();
-        const exists = Object.values(notifData).some(n =>
-          n.username === user.username && n.prizeCode === prize.code
-        );
-        if (exists) {
-          console.log("Notification prevented duplicate push");
-          return alert("Prize already recorded earlier!");
-        }
-      }
-
-      // ----- PUSH SINGLE NOTIFICATION -----
+      // Log success
       await push(ref(realtimeDb, "notifications"), {
-        message: 🎉 ${user.username} scanned Kathmandu Guest House — Congratulations! Prize Code: ${prize.code},
+        message: 🎉 ${user.username} won: ${selectedPrize.code},
         username: user.username,
-        prizeCode: prize.code,
+        prizeCode: selectedPrize.code,
         status: "success",
-        createdAt: Date.now(),
-        claimed: true,
-        claimedAt: Date.now()
+        createdAt: Date.now()
       });
 
-      alert("Prize successfully claimed!");
-
-    } catch (err) {
-      console.error(err);
+      console.log(Prize auto-assigned to ${user.username});
+    } catch (error) {
+      console.error("Assignment failed:", error);
+    } finally {
+      processingRef.current.delete(userId);
     }
   };
 
+  // --- 4. MANUAL CLAIM (BACKUP) ---
+  const handleManualClaim = async (userId) => {
+    if (processingRef.current.has(userId)) {
+      return alert("Already processing this user...");
+    }
+    await assignPrizeToUser(userId);
+  };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <h2 className="text-3xl font-bold flex items-center gap-2">
-        <IoMdNotificationsOutline /> QR Prize Manager
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <h2 className="text-2xl font-bold flex items-center gap-2">
+        <IoMdNotificationsOutline /> QR Competition Dashboard
       </h2>
 
-      {/* PROGRESS LIST */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-xl font-semibold mb-4">Players Progress (Need 8 Scans)</h3>
-        <div className="grid gap-4">
-          {users.map(user => {
-            const scanCount = new Set(scannedUsers.filter(s => s.userId === user.id).map(s => s.qrName)).size;
+      {/* Progress Monitor */}
+      <div className="bg-white shadow rounded-lg p-4">
+        <h3 className="text-lg font-semibold mb-3">Player Progress</h3>
+        <div className="space-y-3">
+          {users.map(u => {
+            const count = new Set(scannedUsers.filter(s => s.userId === u.id).map(s => s.qrName)).size;
+            const wonStatus = notifications.find(n => n.username === u.username && n.status === "success");
+            
             return (
-              <div key={user.id} className="flex items-center justify-between border-b pb-2">
+              <div key={u.id} className="flex justify-between items-center p-3 border rounded">
                 <div>
-                  <p className="font-bold text-lg">{user.username}</p>
-                  <p className="text-sm text-gray-500">
-                    Unique Scans: {scanCount} / 8
-                  </p>
+                  <p className="font-medium">{u.username}</p>
+                  <p className="text-xs text-gray-500">Unique codes: {count}/8-10</p>
+                  {wonStatus && <p className="text-xs text-green-600">✓ Won: {wonStatus.prizeCode}</p>}
                 </div>
-                <button
-                  onClick={() => handleClaimPrize(user.id)}
-                  disabled={scanCount < 8}
-                  className={px-4 py-2 rounded-lg text-white ${scanCount >= 8 ? "bg-green-600 hover:bg-green-700" : "bg-gray-400 cursor-not-allowed"}}
+                <button 
+                  onClick={() => handleManualClaim(u.id)}
+                  disabled={count < 8 || wonStatus}
+                  className={`px-4 py-2 rounded text-white text-sm ${
+                    wonStatus ? 'bg-gray-400' : 
+                    count >= 8 ? 'bg-green-600 hover:bg-green-700' : 
+                    'bg-gray-300 cursor-not-allowed'
+                  }`}
                 >
-                  {scanCount >= 8 ? "Claim Prize" : "Locked"}
+                  {wonStatus ? "Prize Claimed" : count >= 8 ? "Force Assign" : "Locked"}
                 </button>
               </div>
             );
@@ -168,13 +169,12 @@ const Notification = () => {
         </div>
       </div>
 
-      {/* LIVE NOTIFICATIONS */}
-      <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Latest Notifications</h3>
-        {notifications.slice(0, 5).map(n => (
-          <div key={n.id} className="p-4 bg-blue-50 border-l-4 border-blue-500 rounded shadow-sm">
-            <p className="font-medium">{n.message}</p>
-            <p className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleTimeString()}</p>
+      {/* Log Section */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <h3 className="text-lg font-semibold mb-2">Live Wins</h3>
+        {notifications.filter(n => n.status === "success").slice(0, 5).map(n => (
+          <div key={n.id} className="text-sm border-b py-2">
+            <strong>{n.username}:</strong> {n.prizeCode} ({new Date(n.createdAt).toLocaleTimeString()})
           </div>
         ))}
       </div>
