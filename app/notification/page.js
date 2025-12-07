@@ -78,7 +78,7 @@ const Notification = () => {
 
     try {
       // Has the user already won?
-      const winSnap = await get(ref(realtimeDb, UsersWinningStatus/${userId}));
+      const winSnap = await get(ref(realtimeDb, `UsersWinningStatus/${userId}`));
       if (winSnap.val()?.won) return;
 
       const available = prizeCodes.filter(p => !p.used);
