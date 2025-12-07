@@ -6,11 +6,11 @@ import { ref, push, onValue, update, get } from "firebase/database";
 import { IoMdNotificationsOutline } from "react-icons/io";
 
 const Notification = () => {
-  const [users, setUsers] = useState<any[]>([]);
-  const [prizeCodes, setPrizeCodes] = useState<any[]>([]);
-  const [scannedUsers, setScannedUsers] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const processingRef = useRef(new Set<string>());
+  const [users, setUsers] = useState([]);
+  const [prizeCodes, setPrizeCodes] = useState([]);
+  const [scannedUsers, setScannedUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const processingRef = useRef(new Set());
 
   // --- 1. REAL-TIME DATA SYNC ---
   useEffect(() => {
@@ -64,24 +64,18 @@ const Notification = () => {
 
       const userScans = scannedUsers.filter((s) => s.userId === user.id);
       const uniqueScans = new Set(userScans.map((s) => s.qrName)).size;
-
-      // Random target: 8, 9, or 10
-      const requiredScans = Math.floor(Math.random() * 3) + 8;
+      const requiredScans = Math.floor(Math.random() * 3) + 8; // 8-10
 
       if (uniqueScans >= requiredScans) {
         try {
           processingRef.current.add(user.id);
 
-          // Double-check if user already won
-          const statusSnap = await get(
-            ref(realtimeDb, UsersWinningStatus/${user.id})
-          );
+          const statusSnap = await get(ref(realtimeDb, UsersWinningStatus/${user.id}));
           if (statusSnap.val()?.won) {
             processingRef.current.delete(user.id);
             return;
           }
 
-          // Auto-assign prize
           await assignPrizeToUser(user.id);
         } catch (error) {
           console.error("Auto-assign error:", error);
@@ -92,7 +86,7 @@ const Notification = () => {
   }, [scannedUsers, users]);
 
   // --- 3. PRIZE ASSIGNMENT LOGIC ---
-  const assignPrizeToUser = async (userId: string) => {
+  const assignPrizeToUser = async (userId) => {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
 
@@ -112,21 +106,18 @@ const Notification = () => {
     const selectedPrize = availablePrizes[0];
 
     try {
-      // Mark prize as used
       await update(ref(realtimeDb, PrizeCodes/${selectedPrize.id}), {
         used: true,
         assignedTo: userId,
         assignedAt: Date.now(),
       });
 
-      // Mark user as winner
       await update(ref(realtimeDb, UsersWinningStatus/${userId}), {
         won: true,
         prizeCode: selectedPrize.code,
         wonAt: Date.now(),
       });
 
-      // Notify success
       await push(ref(realtimeDb, "notifications"), {
         message: Congratulations: ${user.username} won: ${selectedPrize.code},
         username: user.username,
@@ -143,8 +134,8 @@ const Notification = () => {
     }
   };
 
-  // --- 4. MANUAL CLAIM (BACKUP) ---
-  const handleManualClaim = async (userId: string) => {
+  // --- 4. MANUAL CLAIM ---
+  const handleManualClaim = async (userId) => {
     if (processingRef.current.has(userId)) {
       alert("Already processing this user...");
       return;
@@ -158,13 +149,13 @@ const Notification = () => {
         <IoMdNotificationsOutline /> QR Competition Dashboard
       </h2>
 
-      {/* Progress Monitor */}
       <div className="bg-white shadow rounded-lg p-4">
         <h3 className="text-lg font-semibold mb-3">Player Progress</h3>
         <div className="space-y-3 max-h-96 overflow-y-auto">
           {users.map((u) => {
-            const userScans = scannedUsers.filter((s) => s.userId === u.id);
-            const count = new Set(userScans.map((s) => s.qrName)).size;
+            const count = new Set(
+              scannedUsers.filter((s) => s.userId === u.id).map((s) => s.qrName)
+            ).size;
             const wonStatus = notifications.find(
               (n) => n.username === u.username && n.status === "success"
             );
@@ -176,15 +167,14 @@ const Notification = () => {
               >
                 <div>
                   <p className="font-medium">{u.username}</p>
-                  <p className="text-xs text-gray-500">
-                    Unique codes: {count}/8-10
-                  </p>
+                  <p className="text-xs text-gray-500">Unique codes: {count}/8-10</p>
                   {wonStatus && (
                     <p className="text-xs text-green-600 font-semibold">
                       Won: {wonStatus.prizeCode}
                     </p>
                   )}
                 </div>
+
                 <button
                   onClick={() => handleManualClaim(u.id)}
                   disabled={count < 8 || !!wonStatus}
@@ -196,11 +186,7 @@ const Notification = () => {
                       : "bg-gray-300 cursor-not-allowed"
                   }`}
                 >
-                  {wonStatus
-                    ? "Prize Claimed"
-                    : count >= 8
-                    ? "Force Assign"
-                    : "Locked"}
+                  {wonStatus ? "Prize Claimed" : count >= 8 ? "Force Assign" : "Locked"}
                 </button>
               </div>
             );
@@ -208,7 +194,6 @@ const Notification = () => {
         </div>
       </div>
 
-      {/* Live Wins Log */}
       <div className="bg-gray-50 rounded-lg p-4">
         <h3 className="text-lg font-semibold mb-2">Live Wins (Latest 5)</h3>
         <div className="text-sm space-y-1">
