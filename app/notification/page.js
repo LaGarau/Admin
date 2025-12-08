@@ -182,7 +182,7 @@ const Notification = () => {
       const availableSnap = await get(ref(realtimeDb, "PrizeCodes"));
       const allPrizes = availableSnap.val() || {};
       
-      // 🔥 NEW: Check which prizes are already won
+      // 🔥 Check which prizes are already won
       const prizeWonSnap = await get(ref(realtimeDb, "PrizeWon"));
       const wonPrizes = prizeWonSnap.val() || {};
       const usedPrizeCodes = new Set(Object.values(wonPrizes).map(w => w.prizeCode));
@@ -193,6 +193,16 @@ const Notification = () => {
       
       if (available.length === 0) {
         addDebugLog(`❌ ABORT: No prizes available (${usedPrizeCodes.size} already won)`, "error");
+        
+        // 🚨 Send "All Prizes Finished" notification
+        await push(ref(realtimeDb, "notifications"), {
+          message: `🚫 ALL PRIZES HAVE BEEN WON! ${user.username} completed 8 scans but no prizes remain.`,
+          username: user.username,
+          prizeCode: "N/A - OUT OF STOCK",
+          status: "out_of_prizes",
+          createdAt: Date.now(),
+        });
+        addDebugLog(`📢 Sent "out of prizes" notification for ${user.username}`, "warning");
         return;
       }
       addDebugLog(`✅ Step 3: ${available.length} prizes available (${usedPrizeCodes.size} already won)`, "success");
@@ -395,11 +405,28 @@ const Notification = () => {
           <p className="text-sm text-blue-600 font-semibold">Total Users</p>
           <p className="text-3xl font-bold text-blue-800">{users.length}</p>
         </div>
-        <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-          <p className="text-sm text-green-600 font-semibold">Available Prizes</p>
-          <p className="text-3xl font-bold text-green-800">
+        <div className={`border-2 rounded-lg p-4 ${
+          prizeCodes.length - Object.keys(prizeWon).length === 0 
+            ? 'bg-red-50 border-red-300' 
+            : 'bg-green-50 border-green-200'
+        }`}>
+          <p className={`text-sm font-semibold ${
+            prizeCodes.length - Object.keys(prizeWon).length === 0 
+              ? 'text-red-600' 
+              : 'text-green-600'
+          }`}>
+            Available Prizes
+          </p>
+          <p className={`text-3xl font-bold ${
+            prizeCodes.length - Object.keys(prizeWon).length === 0 
+              ? 'text-red-800' 
+              : 'text-green-800'
+          }`}>
             {prizeCodes.length - Object.keys(prizeWon).length}
           </p>
+          {prizeCodes.length - Object.keys(prizeWon).length === 0 && (
+            <p className="text-xs text-red-600 font-semibold mt-1">🚫 OUT OF STOCK</p>
+          )}
         </div>
         <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
           <p className="text-sm text-purple-600 font-semibold">Total Scans</p>
@@ -557,17 +584,26 @@ const Notification = () => {
               <div 
                 key={n.id} 
                 className={`text-sm border-b py-2 flex justify-between items-center ${
-                  n.status === 'undo' ? 'bg-red-50' : n.status === 'success' ? 'bg-green-50' : ''
+                  n.status === 'undo' ? 'bg-red-50' : 
+                  n.status === 'out_of_prizes' ? 'bg-orange-50 border-l-4 border-orange-500' : 
+                  n.status === 'success' ? 'bg-green-50' : ''
                 }`}
               >
                 <span>
-                  <strong className={n.status === 'undo' ? 'text-red-700' : 'text-green-700'}>
+                  <strong className={
+                    n.status === 'undo' ? 'text-red-700' : 
+                    n.status === 'out_of_prizes' ? 'text-orange-700' :
+                    'text-green-700'
+                  }>
                     {n.username}
                   </strong>:{" "}
-                  <span className="font-mono bg-yellow-100 px-2 py-0.5 rounded">
+                  <span className={`font-mono px-2 py-0.5 rounded ${
+                    n.status === 'out_of_prizes' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100'
+                  }`}>
                     {n.prizeCode}
                   </span>
                   {n.status === 'undo' && <span className="ml-2 text-red-600 font-semibold">(UNDONE)</span>}
+                  {n.status === 'out_of_prizes' && <span className="ml-2 text-orange-600 font-bold">⚠️ NO PRIZES LEFT!</span>}
                 </span>
                 <span className="text-gray-500 text-xs">
                   {new Date(n.createdAt).toLocaleString()}
