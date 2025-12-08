@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { realtimeDb } from "@/lib/firebase";
-import { ref, push, onValue, onChildAdded, update, get, set } from "firebase/database";
+import { ref, push, onValue, onChildAdded, update, get, set, remove } from "firebase/database";
 import { IoMdNotificationsOutline } from "react-icons/io";
 
 const Notification = () => {
@@ -9,9 +9,11 @@ const Notification = () => {
   const [prizeCodes, setPrizeCodes] = useState([]);
   const [scannedUsers, setScannedUsers] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [prizeWon, setPrizeWon] = useState({}); // NEW: Single source of truth
+  const [prizeWon, setPrizeWon] = useState({});
   const [debugLogs, setDebugLogs] = useState([]);
   const [showDebug, setShowDebug] = useState(true);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [userToUndo, setUserToUndo] = useState(null);
 
   const processingRef = useRef(new Set());
 
@@ -63,13 +65,22 @@ const Notification = () => {
         setNotifications(Object.keys(data).map(id => ({ id, ...data[id] })).reverse());
     });
 
-    // 🔥 NEW: Listen to PrizeWon table - SINGLE SOURCE OF TRUTH
     onValue(ref(realtimeDb, "PrizeWon"), (snap) => {
       const data = snap.val();
       setPrizeWon(data || {});
       if (data) {
         const winnersCount = Object.keys(data).length;
         addDebugLog(`🏆 Loaded PrizeWon table: ${winnersCount} confirmed winners`, "success");
+        
+        // 🔥 NEW: Check for duplicate prizes
+        const prizeCounts = {};
+        Object.values(data).forEach(winner => {
+          prizeCounts[winner.prizeCode] = (prizeCounts[winner.prizeCode] || 0) + 1;
+        });
+        const duplicates = Object.entries(prizeCounts).filter(([_, count]) => count > 1);
+        if (duplicates.length > 0) {
+          addDebugLog(`⚠️ DUPLICATE PRIZES DETECTED: ${duplicates.map(([code, count]) => `${code} (${count}x)`).join(', ')}`, "error");
+        }
       } else {
         addDebugLog(`🏆 PrizeWon table is empty (no winners yet)`, "info");
       }
@@ -89,13 +100,11 @@ const Notification = () => {
       const userId = scan.userId;
       addDebugLog(`🔔 New scan detected: ${scan.qrName} by user ${userId}`, "info");
 
-      // 🚨 CRITICAL CHECK #1: Check PrizeWon table FIRST
       if (prizeWon[userId]) {
         addDebugLog(`🚫 BLOCKED: User ${userId} found in PrizeWon table with prize "${prizeWon[userId].prizeCode}". NO ACTION.`, "error");
         return;
       }
 
-      // 🚨 CRITICAL CHECK #2: Prevent concurrent processing
       if (processingRef.current.has(userId)) {
         addDebugLog(`⏸️ User ${userId} already being processed, skipping...`, "warning");
         return;
@@ -103,7 +112,6 @@ const Notification = () => {
       processingRef.current.add(userId);
 
       try {
-        // 🚨 CRITICAL CHECK #3: Double-check PrizeWon from database
         const prizeWonCheck = await get(ref(realtimeDb, `PrizeWon/${userId}`));
         if (prizeWonCheck.exists()) {
           addDebugLog(`🚫 RACE CONDITION BLOCKED: User ${userId} already in PrizeWon table!`, "error");
@@ -111,7 +119,6 @@ const Notification = () => {
           return;
         }
 
-        // Count unique scans
         const scansSnap = await get(scanRef);
         const allScans = scansSnap.val() || {};
         const userScans = Object.values(allScans).filter(s => s.userId === userId);
@@ -119,7 +126,6 @@ const Notification = () => {
         
         addDebugLog(`📊 User ${userId} has ${uniqueCount} unique scans`, "info");
 
-        // 🎯 ONLY trigger at EXACTLY 8 scans
         if (uniqueCount === 8) {
           addDebugLog(`✅ User ${userId} reached EXACTLY 8 scans! Processing prize...`, "success");
           await handleClaimPrize(userId);
@@ -149,7 +155,6 @@ const Notification = () => {
     addDebugLog(`🎁 ========== PRIZE ASSIGNMENT START: ${user.username} ==========`, "info");
 
     try {
-      // 🚨 STEP 1: Check PrizeWon table (SINGLE SOURCE OF TRUTH)
       addDebugLog(`🔍 Step 1: Checking PrizeWon table for ${user.username}...`, "info");
       const prizeWonCheck = await get(ref(realtimeDb, `PrizeWon/${userId}`));
       
@@ -161,7 +166,6 @@ const Notification = () => {
       }
       addDebugLog(`✅ Step 1: ${user.username} NOT in PrizeWon table`, "success");
 
-      // 🚨 STEP 2: Verify EXACTLY 8 scans
       addDebugLog(`🔍 Step 2: Verifying scan count...`, "info");
       const scansSnap = await get(ref(realtimeDb, "scannedQRCodes"));
       const allScans = scansSnap.val() || {};
@@ -174,30 +178,32 @@ const Notification = () => {
       }
       addDebugLog(`✅ Step 2: ${user.username} has EXACTLY 8 unique scans`, "success");
 
-      // 🚨 STEP 3: Check available prizes
       addDebugLog(`🔍 Step 3: Checking available prizes...`, "info");
       const availableSnap = await get(ref(realtimeDb, "PrizeCodes"));
       const allPrizes = availableSnap.val() || {};
+      
+      // 🔥 NEW: Check which prizes are already won
+      const prizeWonSnap = await get(ref(realtimeDb, "PrizeWon"));
+      const wonPrizes = prizeWonSnap.val() || {};
+      const usedPrizeCodes = new Set(Object.values(wonPrizes).map(w => w.prizeCode));
+      
       const available = Object.keys(allPrizes)
         .map(id => ({ id, ...allPrizes[id] }))
-        .filter(p => !p.used);
+        .filter(p => !usedPrizeCodes.has(p.code)); // Filter out already won prizes
       
       if (available.length === 0) {
-        addDebugLog(`❌ ABORT: No prizes available`, "error");
+        addDebugLog(`❌ ABORT: No prizes available (${usedPrizeCodes.size} already won)`, "error");
         return;
       }
-      addDebugLog(`✅ Step 3: ${available.length} prizes available`, "success");
+      addDebugLog(`✅ Step 3: ${available.length} prizes available (${usedPrizeCodes.size} already won)`, "success");
 
-      // 🚨 STEP 4: Select random prize
       addDebugLog(`🎲 Step 4: Selecting random prize...`, "info");
       const randomIndex = Math.floor(Math.random() * available.length);
       const selectedPrize = available[randomIndex];
       addDebugLog(`✅ Step 4: Selected "${selectedPrize.code}" (${randomIndex + 1}/${available.length})`, "success");
 
-      // STEP 5: Skip updating PrizeCodes (it's just a count table)
       addDebugLog(`⏭️ Step 5: Skipping PrizeCodes update (count table only)`, "info");
 
-      // 🔥🔥🔥 STEP 6: POST TO PRIZEWON TABLE (SINGLE SOURCE OF TRUTH)
       addDebugLog(`🏆 Step 6: POSTING TO PRIZEWON TABLE...`, "info");
       const wonData = {
         userId: userId,
@@ -211,7 +217,6 @@ const Notification = () => {
       await set(ref(realtimeDb, `PrizeWon/${userId}`), wonData);
       addDebugLog(`✅ Step 6: ${user.username} POSTED TO PRIZEWON TABLE`, "success");
 
-      // STEP 7: Update old UsersWinningStatus for backward compatibility
       addDebugLog(`📝 Step 7: Updating UsersWinningStatus...`, "info");
       await update(ref(realtimeDb, `UsersWinningStatus/${userId}`), {
         won: true,
@@ -221,7 +226,6 @@ const Notification = () => {
       });
       addDebugLog(`✅ Step 7: UsersWinningStatus updated`, "success");
 
-      // STEP 8: Create notification
       addDebugLog(`📢 Step 8: Creating notification...`, "info");
       await push(ref(realtimeDb, "notifications"), {
         message: `🎉 ${user.username} completed 8 scans and won: ${selectedPrize.code}`,
@@ -242,6 +246,57 @@ const Notification = () => {
   };
 
   // ----------------------------------------------------
+  // 🔥 NEW: UNDO WINNER FUNCTION
+  // ----------------------------------------------------
+  const handleUndoWinner = async (userId) => {
+    const winData = prizeWon[userId];
+    if (!winData) {
+      addDebugLog(`❌ No win data found for user ${userId}`, "error");
+      return;
+    }
+
+    addDebugLog(`🔄 ========== UNDO WIN START: ${winData.username} ==========`, "warning");
+
+    try {
+      // Step 1: Remove from PrizeWon table
+      addDebugLog(`🗑️ Step 1: Removing ${winData.username} from PrizeWon table...`, "warning");
+      await remove(ref(realtimeDb, `PrizeWon/${userId}`));
+      addDebugLog(`✅ Step 1: Removed from PrizeWon table`, "success");
+
+      // Step 2: Update UsersWinningStatus
+      addDebugLog(`📝 Step 2: Resetting UsersWinningStatus...`, "warning");
+      await update(ref(realtimeDb, `UsersWinningStatus/${userId}`), {
+        won: false,
+        prizeCode: null,
+        wonAt: null,
+        undoneAt: Date.now(),
+      });
+      addDebugLog(`✅ Step 2: UsersWinningStatus reset`, "success");
+
+      // Step 3: Create undo notification
+      addDebugLog(`📢 Step 3: Creating undo notification...`, "warning");
+      await push(ref(realtimeDb, "notifications"), {
+        message: `↩️ UNDO: ${winData.username}'s win (${winData.prizeCode}) was reverted by admin`,
+        username: winData.username,
+        prizeCode: winData.prizeCode,
+        status: "undo",
+        createdAt: Date.now(),
+      });
+      addDebugLog(`✅ Step 3: Undo notification created`, "success");
+
+      addDebugLog(`✅✅✅ SUCCESS: ${winData.username}'s win has been undone. Prize "${winData.prizeCode}" is now available again.`, "success");
+      addDebugLog(`========== UNDO WIN COMPLETE ==========`, "success");
+
+      setShowConfirmDialog(false);
+      setUserToUndo(null);
+
+    } catch (err) {
+      addDebugLog(`❌❌❌ UNDO ERROR: ${err.message}`, "error");
+      console.error("Undo error:", err);
+    }
+  };
+
+  // ----------------------------------------------------
   // 4) UI
   // ----------------------------------------------------
   return (
@@ -257,6 +312,43 @@ const Notification = () => {
           {showDebug ? "Hide" : "Show"} Debug Panel
         </button>
       </div>
+
+      {/* 🔥 NEW: UNDO CONFIRMATION DIALOG */}
+      {showConfirmDialog && userToUndo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-red-600 mb-4">⚠️ Confirm Undo Winner</h3>
+            <p className="text-gray-700 mb-2">
+              Are you sure you want to undo the win for:
+            </p>
+            <div className="bg-yellow-50 border-2 border-yellow-300 rounded p-3 mb-4">
+              <p className="font-bold text-lg">{userToUndo.username}</p>
+              <p className="text-sm text-gray-600">Prize: {userToUndo.prizeCode}</p>
+              <p className="text-xs text-gray-500">Won at: {new Date(userToUndo.wonAt).toLocaleString()}</p>
+            </div>
+            <p className="text-sm text-red-600 mb-4">
+              This will make the prize available again and allow the user to win a different prize if they scan 8 codes.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleUndoWinner(userToUndo.userId)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-semibold"
+              >
+                Yes, Undo Win
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  setUserToUndo(null);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DEBUG PANEL */}
       {showDebug && (
@@ -306,7 +398,7 @@ const Notification = () => {
         <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
           <p className="text-sm text-green-600 font-semibold">Available Prizes</p>
           <p className="text-3xl font-bold text-green-800">
-            {prizeCodes.filter(p => !p.used).length}
+            {prizeCodes.length - Object.keys(prizeWon).length}
           </p>
         </div>
         <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
@@ -330,16 +422,25 @@ const Notification = () => {
           <div className="space-y-2">
             {Object.entries(prizeWon).map(([userId, data]) => (
               <div key={userId} className="bg-white p-3 rounded-lg border border-orange-200 flex justify-between items-center">
-                <div>
+                <div className="flex-1">
                   <p className="font-bold text-gray-800">{data.username}</p>
                   <p className="text-xs text-gray-600">User ID: {userId}</p>
                   <p className="text-sm font-mono bg-yellow-100 px-2 py-1 rounded mt-1 inline-block">
                     Prize: {data.prizeCode}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {new Date(data.wonAt).toLocaleString()}
+                  </p>
                 </div>
-                <div className="text-right text-xs text-gray-500">
-                  {new Date(data.wonAt).toLocaleString()}
-                </div>
+                <button
+                  onClick={() => {
+                    setUserToUndo(data);
+                    setShowConfirmDialog(true);
+                  }}
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded font-semibold text-sm transition-colors"
+                >
+                  ↩️ Undo
+                </button>
               </div>
             ))}
           </div>
@@ -358,7 +459,7 @@ const Notification = () => {
             const uniqueScans = new Set(userScans.map(s => s.qrName));
             const count = uniqueScans.size;
             const scanList = Array.from(uniqueScans);
-            const hasWon = prizeWon[u.id]; // Check PrizeWon table
+            const hasWon = prizeWon[u.id];
 
             return (
               <div key={u.id} className={`mb-4 p-4 border-2 rounded-lg ${hasWon ? 'bg-green-50 border-green-400' : 'bg-gray-50 border-gray-200'}`}>
@@ -388,7 +489,6 @@ const Notification = () => {
                       </div>
                     )}
 
-                    {/* Progress Bar */}
                     <div className="mt-2">
                       <div className="flex justify-between text-xs mb-1">
                         <span className="font-semibold">{count}/8 unique scans</span>
@@ -404,7 +504,6 @@ const Notification = () => {
                       </div>
                     </div>
 
-                    {/* Scanned QR Codes */}
                     {scanList.length > 0 && (
                       <div className="mt-2">
                         <p className="text-xs font-semibold text-gray-700 mb-1">Scanned Codes:</p>
@@ -447,21 +546,28 @@ const Notification = () => {
 
       {/* NOTIFICATION LOG */}
       <div className="bg-gray-50 rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-2">🏆 Live Wins (Last 10)</h3>
+        <h3 className="text-lg font-semibold mb-2">🏆 Activity Log (Last 20)</h3>
 
-        {notifications.filter(n => n.status === "success").length === 0 ? (
-          <p className="text-gray-500 text-sm">No winners yet...</p>
+        {notifications.length === 0 ? (
+          <p className="text-gray-500 text-sm">No activity yet...</p>
         ) : (
           notifications
-            .filter(n => n.status === "success")
-            .slice(0, 10)
+            .slice(0, 20)
             .map(n => (
-              <div key={n.id} className="text-sm border-b py-2 flex justify-between items-center">
+              <div 
+                key={n.id} 
+                className={`text-sm border-b py-2 flex justify-between items-center ${
+                  n.status === 'undo' ? 'bg-red-50' : n.status === 'success' ? 'bg-green-50' : ''
+                }`}
+              >
                 <span>
-                  <strong className="text-green-700">{n.username}</strong>:{" "}
+                  <strong className={n.status === 'undo' ? 'text-red-700' : 'text-green-700'}>
+                    {n.username}
+                  </strong>:{" "}
                   <span className="font-mono bg-yellow-100 px-2 py-0.5 rounded">
                     {n.prizeCode}
                   </span>
+                  {n.status === 'undo' && <span className="ml-2 text-red-600 font-semibold">(UNDONE)</span>}
                 </span>
                 <span className="text-gray-500 text-xs">
                   {new Date(n.createdAt).toLocaleString()}
